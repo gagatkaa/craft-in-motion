@@ -1,0 +1,93 @@
+:root {
+  --bg: #0e0f12;
+  --panel: #16181d;
+  --text: #e9edf1;
+  --muted: #9aa4b2;
+  --accent: #f2b84b;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, Arial, sans-serif;
+}
+
+main {
+  max-width: 1000px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+h1 {
+  font-size: 24px;
+  margin: 8px 0 16px;
+  color: var(--accent);
+}
+
+.stage {
+  position: relative;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 12px;
+}
+video,
+canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+}
+video {
+  position: relative;
+  filter: saturate(0.95) brightness(0.95) contrast(1);
+}
+#overlay {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  bottom: 12px;
+  pointer-events: none;
+}
+
+.hud {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.hud .note {
+  color: var(--muted);
+  margin-top: 6px;
+  max-width: 520px;
+}
+
+.controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 14px;
+}
+label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+input[type="range"] {
+  width: 160px;
+}
