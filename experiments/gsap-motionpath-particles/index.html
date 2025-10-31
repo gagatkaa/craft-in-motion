@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>ML signal → particles (simulated)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: #0b0c11;
+            color: #e8ecf1;
+            font-family: system-ui, sans-serif;
+        }
+
+        .ui {
+            position: fixed;
+            left: 16px;
+            top: 16px;
+            z-index: 10;
+            background: #121520;
+            padding: 12px 14px;
+            border-radius: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        input[type="range"] {
+            width: 260px;
+        }
+
+        canvas {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #9aa3b2;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="ui">
+        <label>Tempo (Hz) simulated ML signal: <span id="tempoVal">2.0</span></label>
+        <input id="tempo" type="range" min="0" max="6" step="0.1" value="2" />
+        <div class="hint">
+            Mapping example:<br />
+            higher tempo → more particles, bigger size, shorter lifetime, brighter glow
+        </div>
+    </div>
+    <canvas id="c"></canvas>
+
+    <script>
+        // GSAP core is used for timing and lightweight tween utilities.
+        const canvas = document.getElementById("c");
+        const ctx = canvas.getContext("2d");
+        function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+        addEventListener("resize", resize); resize();
+
+        // Particle pool
+        const particles = [];
+        const center = { x: innerWidth * 0.5, y: innerHeight * 0.6 };
+
+        // Simulated ML tempo input in Hz (replace with real ML later)
+        const tempoEl = document.getElementById("tempo");
+        const tempoVal = document.getElementById("tempoVal");
+        let mlTempoHz = parseFloat(tempoEl.value);
+
+        tempoEl.addEventListener("input", () => {
+            mlTempoHz = parseFloat(tempoEl.value);
+            tempoVal.textContent = mlTempoHz.toFixed(1);
+            // optional gsap quick feedback on change
+            gsap.fromTo(tempoVal, { scale: 1.2 }, { scale: 1, duration: 0.25, ease: "power2.out" });
+        });
+
+        // Meaningful mapping function
+        function mapMlToParams(tempoHz) {
+            // clamp expected working range 0.5 to 5.0 Hz for bartending shake
+            const t = gsap.utils.clamp(0.5, 5.0, tempoHz);
+
+            // emission: particles per tick
+            // low tempo → few particles; high tempo → many particles
+            const emission = gsap.utils.mapRange(0.5, 5.0, 2, 18, t);
+
+            // size: a bit larger with higher tempo to feel more intense
+            const size = gsap.utils.mapRange(0.5, 5.0, 2, 6, t);
+
+            // lifetime: faster tempo feels snappier so shorten life
+            const life = gsap.utils.mapRange(0.5, 5.0, 1.2, 0.45, t);
+
+            // brightness: stronger glow when tempo rises
+            const brightness = gsap.utils.mapRange(0.5, 5.0, 0.5, 1.0, t);
+
+            // velocity: push outward a bit faster with higher tempo
+            const speed = gsap.utils.mapRange(0.5, 5.0, 1.5, 5.0, t);
+
+            return { emission, size, life, brightness, speed };
+        }
+
+        function spawnParticle(params) {
+            // random outward direction
+            const angle = Math.random() * Math.PI * 2;
+            const speed = params.speed * (0.6 + Math.random() * 0.8);
+
+            particles.push({
+                x: center.x,
+                y: center.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: params.size * (0.7 + Math.random() * 0.6),
+                life: params.life,
+                age: 0,
+                brightness: params.brightness
+            });
+        }
+
+        // Draw loop driven by GSAP ticker for smoothness
+        gsap.ticker.add(() => {
+            const { emission } = mapMlToParams(mlTempoHz);
+
+            // emit a few per tick
+            for (let i = 0; i < emission; i++) spawnParticle(mapMlToParams(mlTempoHz));
+
+            // update
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.age += gsap.ticker.deltaRatio() / 60; // seconds
+                if (p.age >= p.life) { particles.splice(i, 1); continue; }
+
+                // integrate
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // fade by normalized age
+                const a = 1 - (p.age / p.life);
+
+                // draw
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                // color: warm spark with brightness controlled by ML tempo
+                const b = p.brightness;
+                ctx.fillStyle = `rgba(${Math.floor(255 * b)}, ${Math.floor(210 * b)}, ${Math.floor(120 * b)}, ${a})`;
+                ctx.shadowBlur = 18 * b;
+                ctx.shadowColor = "rgba(255, 200, 120, 0.9)";
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        });
+
+        // gentle center pulse to show life when tempo is 0
+        gsap.to(center, { y: "+=4", duration: 1.2, yoyo: true, repeat: -1, ease: "sine.inOut" });
+    </script>
+</body>
+
+</html>
