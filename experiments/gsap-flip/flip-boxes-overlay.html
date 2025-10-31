@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="pl">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GSAP Flip – centered overlay</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1012;
+            --tile: #1b1e24;
+            --tile2: #242833;
+            --bd: #2b2f3a;
+            --fg: #e8e8ea
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--fg);
+            font: 16px system-ui;
+            min-height: 100svh;
+            display: grid;
+            place-items: center
+        }
+
+        .wrap {
+            width: min(960px, 92vw)
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px
+        }
+
+        .tile {
+            aspect-ratio: 1/1;
+            background: linear-gradient(135deg, var(--tile), var(--tile2));
+            border: 1px solid var(--bd);
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            cursor: pointer;
+            font-weight: 700
+        }
+
+        .backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .6);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .overlay {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            pointer-events: none;
+        }
+
+        .overlay .tile {
+            width: min(640px, 92vw);
+            height: min(420px, 70vh);
+            aspect-ratio: auto;
+            border-radius: 16px;
+            cursor: zoom-out
+        }
+
+        .hint {
+            opacity: .65;
+            margin: 14px 2px 0;
+            text-align: center;
+            font-size: 14px
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <div class="grid" id="grid">
+            <div class="tile" tabindex="0">1</div>
+            <div class="tile" tabindex="0">2</div>
+            <div class="tile" tabindex="0">3</div>
+            <div class="tile" tabindex="0">4</div>
+            <div class="tile" tabindex="0">5</div>
+            <div class="tile" tabindex="0">6</div>
+            <div class="tile" tabindex="0">7</div>
+            <div class="tile" tabindex="0">8</div>
+            <div class="tile" tabindex="0">9</div>
+            <div class="tile" tabindex="0">10</div>
+            <div class="tile" tabindex="0">11</div>
+            <div class="tile" tabindex="0">12</div>
+        </div>
+        <p class="hint">Kliknij kafel aby otworzyć jako overlay. Kliknij tło lub Esc aby zamknąć.</p>
+    </div>
+
+    <div class="backdrop" id="backdrop"></div>
+    <div class="overlay" id="overlay"></div>
+
+    <script>
+        gsap.registerPlugin(Flip);
+        const grid = document.getElementById("grid");
+        const overlay = document.getElementById("overlay");
+        const backdrop = document.getElementById("backdrop");
+        let active = null;   // aktualnie powiększony kafel
+        let placeholder = null; // miejsce w siatce gdzie wróci
+
+        function openOverlay(tile) {
+            if (active) return;
+            const tiles = [...grid.children];
+            const state = Flip.getState(tiles.concat(tile));
+
+            placeholder = document.createElement("div");
+            placeholder.style.display = "contents"; // zachowaj układ siatki
+            tile.__parent = tile.parentNode;
+            tile.__next = tile.nextSibling;
+            tile.__tab = tile.getAttribute("tabindex") || "0";
+
+            tile.setAttribute("tabindex", "-1");
+            tile.classList.add("is-overlay");
+            overlay.appendChild(tile);
+
+            backdrop.style.pointerEvents = "auto";
+            overlay.style.pointerEvents = "auto";
+
+            Flip.from(state, { duration: .55, ease: "power2.inOut", absolute: true, scale: true });
+
+            gsap.to(backdrop, { opacity: 1, duration: .35, ease: "power2.out" });
+            active = tile;
+        }
+
+        function closeOverlay() {
+            if (!active) return;
+            const tiles = [...grid.children];
+            const state = Flip.getState(tiles.concat(active));
+
+            // przywróć kafel do siatki
+            if (active.__next) active.__parent.insertBefore(active, active.__next);
+            else active.__parent.appendChild(active);
+            active.classList.remove("is-overlay");
+            active.setAttribute("tabindex", active.__tab);
+
+            Flip.from(state, { duration: .45, ease: "power2.out", absolute: true, scale: true });
+            gsap.to(backdrop, {
+                opacity: 0, duration: .3, ease: "power2.out", onComplete: () => {
+                    backdrop.style.pointerEvents = "none";
+                    overlay.style.pointerEvents = "none";
+                }
+            });
+
+            active = null; placeholder = null;
+        }
+
+        grid.addEventListener("click", e => {
+            const t = e.target.closest(".tile"); if (!t) return;
+            openOverlay(t);
+        });
+        backdrop.addEventListener("click", closeOverlay);
+        overlay.addEventListener("click", e => {
+            if (e.target === overlay) closeOverlay();
+        });
+        document.addEventListener("keydown", e => {
+            if (e.key === "Escape") closeOverlay();
+        });
+    </script>
+</body>
+
+</html>
