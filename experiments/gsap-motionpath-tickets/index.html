@@ -3,157 +3,474 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pinned tickets fall in, then continue</title>
-
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CTA with Detailed Tickets Under Heading</title>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;600;800&display=swap"
+        rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/TextPlugin.min.js"></script>
 
     <style>
         :root {
-            --bg: #0e0f13;
-            --ink: #e6e8ef;
-            --muted: #9aa1b6;
-            --ticket: #1e2434;
-            --line: #2a3146;
+            --bg: #0d0d0f;
+            --panel: #121218;
+            --ink: #f4f4f4;
+            --muted: #b7b7c1;
+            --line: rgba(255, 255, 255, .08);
+            --accent: #ff8c00;
+            --accent-2: #ff5078;
+            --ok: #63ffa2;
+            --warn: #ffd66b;
+            --blob-hue: 0deg;
+            --blob-sat: 1.2;
+            --blob-bright: 1;
+            --blob-opacity: .45;
+            --overlay-opacity: 0;
+            --overlay-blur: 0px;
         }
 
         * {
             box-sizing: border-box;
+            margin: 0
         }
 
         html,
         body {
-            height: 100%;
-            margin: 0;
-            background: var(--bg);
-            color: var(--ink);
-            font-family: system-ui, sans-serif;
+            height: 100%
         }
 
-        .spacer {
+        body {
+            background: var(--bg);
+            color: var(--ink);
+            font-family: "Red Hat Display", system-ui, sans-serif
+        }
+
+        .hero,
+        .tail {
+            min-height: 90vh;
+            display: grid;
+            place-items: center;
+            color: #bdbdc7
+        }
+
+        /* Pinned CTA section */
+        .stage {
+            position: relative;
+            min-height: 120vh;
+            overflow: hidden
+        }
+
+        .bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            filter: hue-rotate(var(--blob-hue)) saturate(var(--blob-sat)) brightness(var(--blob-bright)) blur(90px);
+            opacity: var(--blob-opacity);
+        }
+
+        .blob {
+            position: absolute;
+            width: 42vmin;
+            height: 42vmin;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at 35% 35%, rgba(255, 140, 0, .95), rgba(176, 63, 0, 0) 60%),
+                radial-gradient(circle at 70% 70%, rgba(255, 80, 120, .85), rgba(255, 80, 120, 0) 60%);
+            mix-blend-mode: lighten;
+        }
+
+        .overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+            background: radial-gradient(70vmax 70vmax at 50% 50%, rgba(0, 0, 0, 0) 38%, rgba(0, 0, 0, .72) 100%);
+            opacity: var(--overlay-opacity);
+            filter: blur(var(--overlay-blur));
+        }
+
+        .content {
+            position: relative;
+            z-index: 3;
             height: 120vh;
             display: grid;
             place-items: center;
-            color: var(--muted);
+            text-align: center;
+            padding: 6vh 5vw;
         }
 
-        .cta {
-            min-height: 100vh;
+        #ctaText {
+            font-size: clamp(28px, 5vw, 56px);
+            margin: 0 0 14px;
+            opacity: 0;
+            transform: translateY(8px) scale(.98)
+        }
+
+        .ctaBtn {
+            padding: .9rem 1.25rem;
+            border-radius: 999px;
+            background: #fff;
+            color: #0d0d0f;
+            border: 0;
+            font-weight: 800;
+            opacity: 0;
+            transform: translateY(6px)
+        }
+
+        /* Tickets under the CTA - detailed build */
+        .tickets-wrap {
+            margin-top: 1.25rem;
             display: grid;
             place-items: center;
-            position: relative;
-            overflow: hidden;
         }
 
-        .cta__inner {
-            text-align: center;
-            max-width: 900px;
-            padding: 2rem;
+        #ordersCaption {
+            color: var(--muted)
         }
 
-        .tickets {
-            margin-top: 2rem;
+        .tickets-grid {
+            margin-top: 0.75rem;
             display: grid;
-            grid-template-columns: repeat(3, 160px);
+            grid-template-columns: repeat(3, minmax(260px, 1fr));
             gap: 16px 20px;
             justify-content: center;
-            align-content: center;
-            min-height: 380px;
-            position: relative;
+            align-content: start;
+            min-height: 420px;
         }
 
         .ticket {
-            width: 160px;
-            height: 110px;
-            background: var(--ticket);
+            background: var(--panel);
             border: 1px solid var(--line);
-            border-radius: 12px;
+            border-radius: 14px;
+            padding: 12px 12px 12px 14px;
+            color: var(--ink);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, .35);
             display: grid;
-            place-items: center;
-            font-weight: 600;
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+            grid-template-columns: 10px 1fr;
+            gap: 12px;
             transform: translateY(-120vh);
             opacity: 0;
             will-change: transform, opacity;
+        }
+
+        /* left color strip + dot */
+        .ticket__strip {
+            grid-row: 1 / span 4;
+            width: 10px;
+            border-radius: 8px;
+            background: linear-gradient(180deg, var(--accent), var(--accent-2));
+        }
+
+        .ticket__head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: space-between;
+        }
+
+        .ticket__id {
+            font-weight: 800;
+            letter-spacing: .015em
+        }
+
+        .ticket__chip {
+            font-size: 12px;
+            line-height: 1;
+            padding: .3rem .5rem;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            color: var(--muted);
+        }
+
+        /* item list */
+        .ticket__items {
+            margin-top: 6px;
+            border: 1px dashed var(--line);
+            border-radius: 10px;
+            padding: 8px 10px;
+            display: grid;
+            gap: 6px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, .02), transparent);
+        }
+
+        .ticket__row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px
+        }
+
+        .ticket__qty {
+            opacity: .9
+        }
+
+        .ticket__name {
+            font-weight: 600
+        }
+
+        .ticket__note {
+            color: var(--muted);
+            font-size: 12px;
+            margin-left: auto
+        }
+
+        /* comment */
+        .ticket__comment {
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--muted);
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 8px 10px;
+        }
+
+        /* meta */
+        .ticket__meta {
+            margin-top: 8px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .meta__eta {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .meta__eta::before {
+            content: "⏱";
+            opacity: .9
+        }
+
+        .meta__status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--ok)
+        }
+
+        .meta__status::before {
+            content: "●";
+            font-size: 10px;
+            color: var(--ok)
+        }
+
+        /* responsive */
+        @media (max-width: 900px) {
+            .tickets-grid {
+                grid-template-columns: repeat(2, minmax(240px, 1fr))
+            }
+        }
+
+        @media (max-width: 560px) {
+            .tickets-grid {
+                grid-template-columns: 1fr
+            }
+        }
+
+        /* reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .ticket {
+                transform: none;
+                opacity: 1;
+                transition: none
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="spacer">Scroll down to the CTA</div>
+    <header class="hero">
+        <div>Scroll down</div>
+    </header>
 
-    <section class="cta" id="cta">
-        <div class="cta__inner">
-            <h2>Are you ready to keep the rhythm?</h2>
-            <p class="muted">We’ll pause here. Tickets drop from above, then you can scroll on.</p>
+    <section id="ctaStage" class="stage">
+        <!-- blobs -->
+        <div class="bg" aria-hidden="true">
+            <div class="blob" style="top:10%; left:10%"></div>
+            <div class="blob" style="top:15%; left:22%"></div>
+            <div class="blob" style="top:6%;  left:28%"></div>
+            <div class="blob" style="bottom:10%; right:10%"></div>
+            <div class="blob" style="bottom:15%; right:22%"></div>
+            <div class="blob" style="bottom:6%;  right:28%"></div>
+        </div>
+        <div class="overlay" aria-hidden="true"></div>
 
-            <div class="tickets" id="tickets">
-                <div class="ticket">#1001<br />2x Burger</div>
-                <div class="ticket">#1002<br />Latte</div>
-                <div class="ticket">#1003<br />Soup + Bread</div>
-                <div class="ticket">#1004<br />Pasta</div>
-                <div class="ticket">#1005<br />Tacos</div>
-                <div class="ticket">#1006<br />Salad</div>
-                <div class="ticket">#1007<br />Tea</div>
-                <div class="ticket">#1008<br />Fries</div>
-                <div class="ticket">#1009<br />Soda</div>
+        <div class="content">
+            <div>
+                <h2 id="ctaText">Are you ready to try it for yourself ?</h2>
+                <button id="ctaBtn" class="ctaBtn" type="button">Start</button>
+
+                <div class="tickets-wrap">
+                    <p id="ordersCaption" style="opacity:0; transform:translateY(8px)">
+                        Orders are stacking up. Focus and pull them in.
+                    </p>
+
+                    <!-- Detailed tickets -->
+                    <div class="tickets-grid" id="ticketsGrid">
+                        <article class="ticket" aria-label="Order 241">
+                            <div class="ticket__strip"></div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0241</div>
+                                <span class="ticket__chip">Priority</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">2x</span>
+                                    <span class="ticket__name">Mocktail Citrus</span>
+                                    <span class="ticket__note">no ice</span>
+                                </div>
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Lime Shot</span>
+                                    <span class="ticket__note">extra sour</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: guest is in a hurry, keep it crisp</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:40</span>
+                                <span class="meta__status">queued</span>
+                            </div>
+                        </article>
+
+                        <article class="ticket" aria-label="Order 242">
+                            <div class="ticket__strip" style="background:linear-gradient(180deg, #6aa8ff, #7bffea)">
+                            </div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0242</div>
+                                <span class="ticket__chip">Standard</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Espresso Tonic</span>
+                                    <span class="ticket__note">normal ice</span>
+                                </div>
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Orange Zest</span>
+                                    <span class="ticket__note">garnish</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: no sugar syrup</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:32</span>
+                                <span class="meta__status" style="color:var(--warn)"><span
+                                        style="display:none"></span>prep</span>
+                            </div>
+                        </article>
+
+                        <article class="ticket" aria-label="Order 243">
+                            <div class="ticket__strip" style="background:linear-gradient(180deg, #8fff9f, #39f0d0)">
+                            </div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0243</div>
+                                <span class="ticket__chip">Standard</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">3x</span>
+                                    <span class="ticket__name">Virgin Mule</span>
+                                    <span class="ticket__note">ginger +</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: table wants copper mugs</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:25</span>
+                                <span class="meta__status">queued</span>
+                            </div>
+                        </article>
+
+                        <article class="ticket" aria-label="Order 244">
+                            <div class="ticket__strip" style="background:linear-gradient(180deg, #ff9b6b, #ff6bd5)">
+                            </div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0244</div>
+                                <span class="ticket__chip">Rush</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Cold Brew</span>
+                                    <span class="ticket__note">no milk</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: take-out lid</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:18</span>
+                                <span class="meta__status">queued</span>
+                            </div>
+                        </article>
+
+                        <!-- add more tickets if you want -->
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
-    <div class="spacer">You’re free to continue</div>
+    <footer class="tail">
+        <div>End</div>
+    </footer>
 
     <script>
-        gsap.registerPlugin(ScrollTrigger);
+        gsap.registerPlugin(ScrollTrigger, TextPlugin);
 
-        const tickets = gsap.utils.toArray(".ticket");
-
-        // Timeline tied to scroll while pinned.
+        // Pinned master timeline
         const tl = gsap.timeline({
-            defaults: { ease: "power2.out" }
+            scrollTrigger: {
+                trigger: "#ctaStage",
+                start: "top top",
+                end: "+=1700",
+                scrub: 0.7,
+                pin: true,
+                anticipatePin: 1
+                // markers:true
+            }
         });
 
-        // Drop all tickets from top into their grid spots with a stagger
+        // Blobs color ramp
+        tl.to(":root", {
+            "--overlay-opacity": 1,
+            "--overlay-blur": "2px",
+            "--blob-sat": 2.4,
+            "--blob-opacity": 0.70,
+            duration: 0.7, ease: "power2.out"
+        }, 0).to(":root", {
+            "--blob-hue": "120deg",
+            "--blob-bright": 1.15,
+            duration: 1.0, ease: "none"
+        }, 0.1);
+
+        // CTA text and button
+        gsap.set("#ctaText", { text: "" });
+        tl.to("#ctaText", { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "power2.out" }, 0.6)
+            .to("#ctaText", { text: "Are you ready to try it for yourself ?", duration: 1.0, ease: "none" }, 0.62)
+            .to("#ctaBtn", { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.85);
+
+        // Caption then tickets
+        tl.to("#ordersCaption", { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, 1.05);
+
+        // Tickets drop in
+        const tickets = gsap.utils.toArray("#ticketsGrid .ticket");
         tl.to(tickets, {
             y: 0,
             opacity: 1,
             duration: 0.9,
-            stagger: { each: 0.12 }
-        });
+            ease: "power2.out",
+            stagger: { each: 0.14 }
+        }, 1.12)
+            .to(tickets, { y: "+=6", duration: 0.2 }, ">")
+            .to(tickets, { y: "-=6", duration: 0.25 }, ">");
 
-        // Small settle effect at the end (optional)
-        tl.to(tickets, {
-            y: "+=6",
-            duration: 0.2
-        }).to(tickets, {
-            y: "-=6",
-            duration: 0.25
-        });
-
-        // ScrollTrigger: pin the section until the whole sequence is done.
-        ScrollTrigger.create({
-            trigger: "#cta",
-            start: "top top",
-            end: "+=1400",           // increase to stay longer
-            pin: true,
-            scrub: true,             // user scroll controls the timeline progress
-            animation: tl,
-            // markers: true          // uncomment to debug
-        });
-
-        /*
-          Alternative behavior (auto-play while pinned, no scrub):
-          ScrollTrigger.create({
-            trigger: "#cta",
-            start: "top top",
-            pin: true,
-            end: "+=1", // tiny, we control release manually
-            onEnter: () => tl.play(),
-            onEnterBack: () => tl.progress(0).play(),
-            onLeave: self => self.disable(), // release after animation
-          });
-        */
+        // optional click
+        document.getElementById("ctaBtn").addEventListener("click", () => alert("Proceed to interaction"));
     </script>
 </body>
 

@@ -154,7 +154,12 @@
                 const b = p.brightness;
                 ctx.fillStyle = `rgba(${Math.floor(255 * b)}, ${Math.floor(210 * b)}, ${Math.floor(120 * b)}, ${a})`;
                 ctx.shadowBlur = 18 * b;
-                ctx.shadowColor = "rgba(255, 200, 120, 0.9)";
+                // Create gradient-like fire effect based on tempo/brightness
+                const r = Math.floor(255 * b);  // Red stays strong
+                const g = Math.floor((210 - 60 * b) * b);  // Green decreases with tempo
+                const bl = Math.floor((120 - 90 * b) * b); // Blue decreases more with tempo
+                ctx.shadowColor = `rgba(${r}, ${g}, ${bl}, 0.9)`;
+                ctx.fillStyle = `rgba(${r}, ${g}, ${bl}, ${a})`;
                 ctx.fill();
                 ctx.shadowBlur = 0;
             }
