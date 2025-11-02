@@ -7,82 +7,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="favicon-logo.svg">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+    <title>GSAP Intro</title>
 
-    <title>Bartender Intro</title>
-
-    <style>
-        html,
-        body {
-            margin: 0;
-            height: 100%;
-            background: #180801;
-            overflow: hidden;
-            color: #f4f4f4;
-            font-family: "Red Hat Display", sans-serif;
-        }
-
-        .hero {
-            position: relative;
-            width: 100%;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-        }
-
-        /* ---- BLOBS ---- */
-        .blobs {
-            position: absolute;
-            inset: 0;
-            filter: blur(80px);
-            overflow: hidden;
-        }
-
-        .blob {
-            position: absolute;
-            width: 400px;
-            height: 400px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 30% 30%, #ff6f00, #b03f00);
-            opacity: 0.4;
-        }
-
-        /* ---- TEXT ---- */
-        .text {
-            position: relative;
-            text-align: center;
-            font-size: 4rem;
-            letter-spacing: 0.05em;
-        }
-
-        .text h1 {
-            opacity: 0;
-            transform: translateY(40px);
-            margin: 0.2em 0;
-        }
-
-        /* ---- SOUND BUTTON ---- */
-        .sound-btn {
-            position: absolute;
-            top: 24px;
-            right: 24px;
-            background: rgba(255, 255, 255, 0.08);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            padding: 10px 16px;
-            cursor: pointer;
-            backdrop-filter: blur(6px);
-            font-weight: 500;
-            transition: background 0.3s;
-            z-index: 10;
-        }
-
-        .sound-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
-        }
-    </style>
 </head>
 
 <body>
@@ -104,11 +32,9 @@
         <button id="soundButton" class="sound-btn">Play Sound</button>
     </section>
 
-    <!-- GSAP -->
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
 
     <script>
-        // --- text animation ---
+
         const tl = gsap.timeline({ delay: 0.5 });
         tl.to(".text h1", {
             opacity: 1,
@@ -117,7 +43,7 @@
             stagger: 0.4,
             ease: "power2.out",
         });
-        // --- STARTING POSITIONS ---
+
         // top-left group
         gsap.set("#b1", { top: "10%", left: "10%" });
         gsap.set("#b2", { top: "15%", left: "20%" });
@@ -128,7 +54,7 @@
         gsap.set("#b5", { bottom: "15%", right: "20%" });
         gsap.set("#b6", { bottom: "5%", right: "25%" });
 
-        // --- blob drifting animation ---
+
         gsap.to("#b1", {
             x: 400,
             y: 300,
@@ -179,7 +105,7 @@
             yoyo: true,
             ease: "sine.inOut"
         });
-        // optional subtle glow pulse
+
         gsap.to(".blobs", {
             opacity: 0.5,
             duration: 6,
@@ -187,7 +113,7 @@
             repeat: -1,
             ease: "sine.inOut"
         });
-        // ---- AUDIO CONTROL ----
+
         const sound = new Audio("audio/bar-sounds.mp3");
         sound.loop = true;
         const btn = document.getElementById("soundButton");
