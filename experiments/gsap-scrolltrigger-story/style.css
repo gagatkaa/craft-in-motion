@@ -1,0 +1,119 @@
+:root {
+  --bg: #0d0d0f;
+  --text: #f4f4f4;
+  --muted: #b7b7c1;
+  --card: #141419cc;
+  /* translucent so blobs glow through */
+  --border: rgba(255, 255, 255, 0.08);
+  --accent: #ff7a1a;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Red Hat Display", system-ui, sans-serif;
+  /* this helps anchor jumps, not wheel scrolling, but harmless */
+  scroll-behavior: smooth;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Eternal background blobs */
+.bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(100px) saturate(200%);
+  opacity: 0.45;
+}
+
+.blob {
+  position: absolute;
+  width: 440px;
+  height: 440px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ff8c00, #b03f00);
+  opacity: 0.4;
+  mix-blend-mode: lighten;
+  transform: translateZ(0);
+  /* GPU promote */
+}
+
+/* Content above the background */
+.content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Intro hero text */
+.hero {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 8vh 6vw;
+}
+
+.intro {
+  text-align: center;
+  font-size: clamp(36px, 6vw, 68px);
+  letter-spacing: 0.05em;
+  line-height: 1.05;
+}
+
+.intro h1 {
+  margin: 0.15em 0;
+  opacity: 0;
+  transform: translateY(40px);
+}
+
+/* Story sections */
+.spacer {
+  height: 8vh;
+}
+
+section.panel {
+  min-height: 90vh;
+  display: grid;
+  place-items: center;
+  padding: 6vh 6vw;
+}
+
+.card {
+  max-width: 960px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: clamp(20px, 4vw, 36px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backdrop-filter: blur(6px);
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+.card h2 {
+  margin: 0.3em 0 0.2em;
+  font-size: clamp(24px, 4.6vw, 44px);
+  line-height: 1.1;
+}
+
+.card p {
+  margin: 0.6em 0 0 0;
+  color: var(--muted);
+  font-size: clamp(16px, 2.2vw, 20px);
+  line-height: 1.6;
+}
