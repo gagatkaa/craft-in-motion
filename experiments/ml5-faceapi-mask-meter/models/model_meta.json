@@ -1,0 +1,1 @@
+{"inputUnits":[2],"outputUnits":2,"inputs":{"S":{"dtype":"number","min":4.600613392613484,"max":192.54876736969726},"dEAR":{"dtype":"number","min":-0.13342013291328353,"max":-0.019102519336160362}},"outputs":{"label":{"dtype":"string","min":0,"max":1,"uniqueValues":["fake","real"],"legend":{"fake":[1,0],"real":[0,1]}}},"isNormalized":true}

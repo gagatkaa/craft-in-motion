@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="pl">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Smile detector — production mode</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, sans-serif;
+            background: #0e1116;
+            color: #e9eef3;
+        }
+
+        main {
+            max-width: 720px;
+            margin: 24px auto;
+            padding: 16px;
+        }
+
+        .cam {
+            position: relative;
+            width: 560px;
+            height: 420px;
+            margin: auto;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #10141f;
+            border: 1px solid #222b3f;
+        }
+
+        video,
+        canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .badge {
+            position: absolute;
+            left: 12px;
+            bottom: 12px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-weight: 800;
+            background: #151c2a;
+            border: 1px solid #28324a;
+        }
+
+        .good {
+            color: #36d48b;
+        }
+
+        .bad {
+            color: #ff6b74;
+        }
+
+        .mid {
+            color: #f0d46b;
+        }
+
+        .muted {
+            opacity: .85;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <h1 style="text-align:center">Smile detector — produkcja</h1>
+        <p class="muted">Model ładowany z folderu <code>/models</code>. Uruchom przez http://localhost lub HTTPS.</p>
+
+        <div class="cam">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="overlay" width="560" height="420"></canvas>
+            <div class="badge mid" id="liveLabel">Inicjalizacja…</div>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <script>
+        if (window.__SMILE_PROD_STARTED__) {
+            console.log('Prod already started');
+        } else {
+            window.__SMILE_PROD_STARTED__ = true;
+
+            const video = document.getElementById('video');
+            const overlay = document.getElementById('overlay');
+            const ctx = overlay.getContext('2d');
+            const liveLabel = document.getElementById('liveLabel');
+
+            let facemesh, predictHandler;
+            let predictions = [];
+            let nn;
+
+            // --- Kalibracja zbierana po LICZBIE KLATEK, nie po czasie ---
+            let baselineEAR = null;
+            let calibSum = 0, calibN = 0;
+            let calibrated = false;
+            const CALIB_REQUIRED_FRAMES = 20; // ile klatek z twarzą chcemy zebrać na neutral
+            let modelReady = false; // dopiero po wczytaniu modelu klasyfikujemy
+
+            const IDX = {
+                mouthL: 61, mouthR: 291, mouthUp: 13, mouthDn: 14,
+                eyeL_h1: 33, eyeL_h2: 133, eyeL_v1: 159, eyeL_v2: 145,
+                eyeR_h1: 362, eyeR_h2: 263, eyeR_v1: 386, eyeR_v2: 374
+            };
+
+            init().catch(e => {
+                console.error(e);
+                alert('Uruchom przez localhost lub HTTPS i zezwól na kamerę.');
+            });
+
+            async function init() {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 560, height: 420 } });
+                video.srcObject = stream;
+                await new Promise(r => video.onloadedmetadata = r);
+
+                facemesh = ml5.facemesh(video, () => {
+                    liveLabel.textContent = 'Ładowanie modelu klasyfikatora…';
+                });
+                predictHandler = (res) => { predictions = res; draw(); };
+                facemesh.on('predict', predictHandler);
+
+                nn = ml5.neuralNetwork({ task: 'classification', debug: false });
+                nn.load({
+                    model: 'models/model.json',
+                    metadata: 'models/model_meta.json',
+                    weights: 'models/model.weights.bin'
+                }, () => {
+                    modelReady = true;
+                    // Reset kalibracji i komunikat
+                    baselineEAR = null;
+                    calibSum = 0; calibN = 0; calibrated = false;
+                    liveLabel.className = 'badge mid';
+                    liveLabel.textContent = `Kalibracja oczu… patrz neutralnie (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+                });
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+                if (!predictions || predictions.length === 0) {
+                    // brak twarzy
+                    if (!calibrated) {
+                        liveLabel.className = 'badge mid';
+                        liveLabel.textContent = `Kalibracja: brak twarzy (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+                    } else {
+                        liveLabel.className = 'badge mid';
+                        liveLabel.textContent = 'Brak twarzy w kadrze';
+                    }
+                    return;
+                }
+
+                const kp = predictions[0].scaledMesh;
+                const S = smileWidthRatio(kp);
+                const EAR = (eyeAspectRatioL(kp) + eyeAspectRatioR(kp)) / 2;
+
+                // rysunek pomocniczy (możesz wyłączyć dla większej wydajności)
+                strokePath([IDX.mouthL, IDX.mouthUp, IDX.mouthR, IDX.mouthDn], kp);
+                strokePath([IDX.eyeL_h1, IDX.eyeL_v1, IDX.eyeL_h2, IDX.eyeL_v2], kp);
+                strokePath([IDX.eyeR_h1, IDX.eyeR_v1, IDX.eyeR_h2, IDX.eyeR_v2], kp);
+
+                // --- Kalibracja po liczbie klatek z twarzą ---
+                if (modelReady && !calibrated) {
+                    calibSum += EAR; calibN++;
+                    liveLabel.className = 'badge mid';
+                    liveLabel.textContent = `Kalibracja oczu… patrz neutralnie (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+
+                    if (calibN >= CALIB_REQUIRED_FRAMES) {
+                        baselineEAR = calibSum / calibN;
+                        calibrated = true;
+                        liveLabel.className = 'badge mid';
+                        liveLabel.textContent = 'Gotowe. Patrz w kamerę i uśmiechnij się.';
+                    }
+                    return; // do czasu kalibracji nie klasyfikujemy
+                }
+
+                if (!modelReady || !calibrated) return;
+
+                const dEAR = EAR - baselineEAR;
+
+                nn.classify({ S, dEAR }, (err, res) => {
+                    if (err || !res || !res.length) return;
+                    const top = res[0];
+                    const label = top.label;
+                    const conf = Math.round(top.confidence * 100);
+                    if (label === 'real') {
+                        liveLabel.className = 'badge good';
+                        liveLabel.textContent = `Prawdziwszy uśmiech ${conf}%`;
+                    } else if (label === 'fake') {
+                        liveLabel.className = 'badge bad';
+                        liveLabel.textContent = `Sztuczny uśmiech ${conf}%`;
+                    } else {
+                        liveLabel.className = 'badge mid';
+                        liveLabel.textContent = `${label} ${conf}%`;
+                    }
+                });
+            }
+
+            function smileWidthRatio(pts) {
+                const L = pts[IDX.mouthL], R = pts[IDX.mouthR], U = pts[IDX.mouthUp], D = pts[IDX.mouthDn];
+                const w = dist(L, R), h = dist(U, D) + 1e-6;
+                return w / h;
+            }
+            function eyeAspectRatioL(pts) {
+                const h1 = pts[IDX.eyeL_h1], h2 = pts[IDX.eyeL_h2];
+                const v1 = pts[IDX.eyeL_v1], v2 = pts[IDX.eyeL_v2];
+                const A = dist(v1, v2), C = dist(h1, h2) + 1e-6;
+                return A / C;
+            }
+            function eyeAspectRatioR(pts) {
+                const h1 = pts[IDX.eyeR_h1], h2 = pts[IDX.eyeR_h2];
+                const v1 = pts[IDX.eyeR_v1], v2 = pts[IDX.eyeR_v2];
+                const A = dist(v1, v2), C = dist(h1, h2) + 1e-6;
+                return A / C;
+            }
+            function dist(a, b) { const dx = a[0] - b[0], dy = a[1] - b[1]; return Math.hypot(dx, dy); }
+            function strokePath(indices, pts) {
+                ctx.strokeStyle = '#5c6bf7'; ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(pts[indices[0]][0], pts[indices[0]][1]);
+                for (let i = 1; i < indices.length; i++) {
+                    const p = pts[indices[i]];
+                    ctx.lineTo(p[0], p[1]);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            }
+        }
+    </script>
+
+</body>
+
+</html>
