@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bartender Coach – PoseNet (kąt łokcia, pozycja shakera, BPM)</title>
+
+    <!-- p5.js + ml5.js -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.3/lib/addons/p5.dom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ml5@0.12.2/dist/ml5.min.js"></script>
+
+    <style>
+        :root {
+            --bg: #0f1012;
+            --card: #171a20;
+            --ink: #eff1f5;
+            --muted: #a0a6b8;
+            --ok: #10b981;
+            --bad: #ef4444;
+            --accent: #7c3aed;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            background: radial-gradient(1200px 800px at 70% 30%, #12141a 0%, #0c0d11 50%, #07080b 100%);
+            color: var(--ink);
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 16px;
+            padding: 16px;
+        }
+
+        .stage {
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #0b0d12;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .4), inset 0 0 0 1px rgba(255, 255, 255, .05);
+            min-height: 50vh;
+        }
+
+        .panel {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 16px 16px 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(255, 255, 255, .06);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: sticky;
+            top: 16px;
+            height: calc(100vh - 32px);
+            overflow: auto;
+        }
+
+        h1 {
+            font-size: 18px;
+            font-weight: 800;
+            margin: 0 0 4px;
+            letter-spacing: .2px;
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        fieldset {
+            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: 12px;
+            padding: 10px 12px 6px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px 12px;
+            align-items: center;
+            background: #12151c;
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, .05);
+        }
+
+        .status-label {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .status-value {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .big {
+            font-size: 28px;
+            line-height: 1;
+            font-weight: 800;
+            letter-spacing: .5px;
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+
+        #shaker-warning {
+            display: none;
+            background: color-mix(in srgb, var(--bad) 15%, transparent);
+            border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent);
+            color: var(--ink);
+            padding: 10px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+
+        .legend {
+            display: grid;
+            grid-template-columns: 16px 1fr;
+            gap: 10px;
+            align-items: center;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .dot.ok {
+            background: var(--ok);
+        }
+
+        .dot.bad {
+            background: var(--bad);
+        }
+
+        footer {
+            margin-top: auto;
+            font-size: 11px;
+            color: var(--muted);
+            border-top: 1px dashed rgba(255, 255, 255, .08);
+            padding-top: 10px;
+        }
+
+        @media (max-width: 960px) {
+            body {
+                grid-template-columns: 1fr;
+            }
+
+            .panel {
+                position: relative;
+                height: auto;
+                top: 0;
+            }
+        }
+
+        .hand-pick {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .kbd {
+            font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            background: #0f1117;
+            padding: 2px 6px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, .08);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="stage" id="stage"><!-- p5 canvas tutaj --></div>
+
+    <aside class="panel">
+        <div>
+            <h1>Bartender Coach</h1>
+            <div class="muted">PoseNet ml5 + p5 — kąt łokcia, pozycja shakera i tempo shakowania</div>
+        </div>
+
+        <fieldset>
+            <legend class="muted">Ręka mierzona</legend>
+            <div class="hand-pick">
+                <label><input type="radio" name="hand" value="right" checked /> Prawa</label>
+                <label><input type="radio" name="hand" value="left" /> Lewa</label>
+            </div>
+            <div class="muted" style="margin-top:6px">Wskazówka: wybierz rękę dominującą. Ta ręka będzie w pełni
+                oceniana.</div>
+        </fieldset>
+
+        <div class="status-grid">
+            <div class="status-label">Model</div>
+            <div class="status-value" id="model-status">Ładowanie…</div>
+            <div class="status-label">Klatki</div>
+            <div class="status-value" id="fps">—</div>
+            <div class="status-label">Kąt łokcia</div>
+            <div class="status-value" id="elbow-angle">—</div>
+            <div class="status-label">Pozycja shakera</div>
+            <div class="status-value" id="shaker-status">—</div>
+        </div>
+
+        <div class="status-grid">
+            <div class="row">
+                <span class="status-label">Tempo</span>
+                <span class="muted">z ruchu nadgarstka <span class="kbd" id="hand-label">P</span></span>
+            </div>
+            <div class="row">
+                <div class="big"><span id="bpm">—</span> <span class="muted">BPM</span></div>
+                <div><span id="hz">—</span> <span class="muted">Hz</span></div>
+            </div>
+        </div>
+
+        <div id="shaker-warning">Trzymaj shaker przy boku głowy, nie przed twarzą.</div>
+
+        <div class="legend">
+            <div class="dot ok"></div>
+            <div>Prawidłowa strefa przy głowie</div>
+            <div class="dot bad"></div>
+            <div>Poza strefą lub za blisko środka twarzy</div>
+        </div>
+
+        <footer>
+            Najlepiej działa przy dobrym oświetleniu. Kamera powinna obejmować głowę, barki i mierzoną rękę.
+        </footer>
+    </aside>
+
+    <script>
+        // -------------------- PARAMETRY --------------------
+        const ANGLE_TARGET_MIN = 70;     // zalecany zakres zgięcia łokcia
+        const ANGLE_TARGET_MAX = 100;
+        const SIDE_MIN_OFFSET_PX = 40;   // minimalny odsuw nadgarstka od środka głowy po X
+        const VERT_TOLERANCE_PX = 80;    // dopuszczalna różnica wysokości względem głowy
+        const MAX_HEAD_DISTANCE_PX = 220;// maksymalny dystans „przy głowie”
+
+        // Tempo z nadgarstka
+        const MAX_HISTORY_MS = 3000;
+        const PEAK_MIN_AMPLITUDE = 12;   // min amplituda ruchu w px
+        const PEAK_DEBOUNCE_MS = 120;    // min odstęp między pikami
+
+        // -------------------- STAN --------------------
+        let video, poseNet, poses = [];
+        let lastFrameTime = performance.now();
+        let smoothedFps = 0;
+
+        let dominant = 'right'; // 'right' | 'left'
+        let wristHistory = [];  // [{t, y}]
+        let peakTimes = [];
+
+        const elModel = document.getElementById('model-status');
+        const elFps = document.getElementById('fps');
+        const elAngle = document.getElementById('elbow-angle');
+        const elShakerStatus = document.getElementById('shaker-status');
+        const elWarn = document.getElementById('shaker-warning');
+        const elBpm = document.getElementById('bpm');
+        const elHz = document.getElementById('hz');
+        const elHandLabel = document.getElementById('hand-label');
+
+        // wybór ręki
+        document.querySelectorAll('input[name="hand"]').forEach(r => {
+            r.addEventListener('change', () => {
+                dominant = r.value; // 'right' lub 'left'
+                elHandLabel.textContent = dominant === 'right' ? 'P' : 'L';
+                wristHistory = [];
+                peakTimes = [];
+                elBpm.textContent = '—';
+                elHz.textContent = '—';
+            });
+        });
+
+        // -------------------- P5 SKETCH --------------------
+        const sketch = (p) => {
+            p.setup = function () {
+                const stage = document.getElementById('stage');
+                const w = stage.clientWidth;
+                const h = Math.round((stage.clientWidth * 9) / 16);
+                const cnv = p.createCanvas(w, h);
+                cnv.parent(stage);
+
+                video = p.createCapture(p.VIDEO);
+                video.size(w, h);
+                video.hide();
+
+                poseNet = ml5.poseNet(video, () => {
+                    elModel.textContent = 'Gotowy';
+                });
+                poseNet.on('pose', (results) => { poses = results; });
+
+                // Resize
+                new ResizeObserver(() => {
+                    const w2 = stage.clientWidth;
+                    const h2 = Math.round((w2 * 9) / 16);
+                    p.resizeCanvas(w2, h2);
+                    if (video) video.size(w2, h2);
+                }).observe(stage);
+            };
+
+            p.draw = function () {
+                // obraz w lustrze
+                p.push();
+                p.translate(p.width, 0);
+                p.scale(-1, 1);
+                p.image(video, 0, 0, p.width, p.height);
+                p.pop();
+
+                drawKeypoints(p);
+                drawSkeleton(p);
+                runMetrics(p);
+
+                // FPS
+                const now = performance.now();
+                const dt = (now - lastFrameTime) / 1000;
+                lastFrameTime = now;
+                const instFps = 1 / Math.max(dt, 1e-6);
+                smoothedFps = smoothedFps ? p.lerp(smoothedFps, instFps, 0.1) : instFps;
+                elFps.textContent = Math.round(smoothedFps);
+            };
+        };
+
+        function drawKeypoints(p) {
+            if (!poses.length) return;
+            poses.forEach(({ pose }) => {
+                pose.keypoints.forEach(kp => {
+                    if (kp.score > 0.5) {
+                        p.fill(124, 58, 237);
+                        p.noStroke();
+                        p.circle(kp.position.x, kp.position.y, 6);
+                    }
+                });
+            });
+        }
+
+        function drawSkeleton(p) {
+            if (!poses.length) return;
+            const skelPairs = [
+                ['leftShoulder', 'rightShoulder'],
+                ['leftShoulder', 'leftElbow'],
+                ['leftElbow', 'leftWrist'],
+                ['rightShoulder', 'rightElbow'],
+                ['rightElbow', 'rightWrist'],
+                ['leftShoulder', 'leftHip'],
+                ['rightShoulder', 'rightHip'],
+                ['leftHip', 'rightHip'],
+                ['leftEye', 'rightEye'],
+                ['leftEar', 'leftEye'],
+                ['rightEar', 'rightEye'],
+            ];
+            const pose = poses[0].pose;
+            p.stroke(255, 255, 255, 120);
+            p.strokeWeight(2);
+            for (const [a, b] of skelPairs) {
+                const A = pose[a], B = pose[b];
+                if (A && B && A.confidence > 0.5 && B.confidence > 0.5) {
+                    p.line(A.x, A.y, B.x, B.y);
+                }
+            }
+        }
+
+        // -------------------- METRYKI --------------------
+        function runMetrics(p) {
+            if (!poses.length) {
+                elAngle.textContent = '—';
+                elShakerStatus.textContent = '—';
+                elWarn.style.display = 'none';
+                elBpm.textContent = '—';
+                elHz.textContent = '—';
+                return;
+            }
+            const pose = poses[0].pose;
+
+            // wybór stron
+            const S = dominant === 'right' ? 'right' : 'left';
+            const oppS = dominant === 'right' ? 'left' : 'right'; // druga strona do szkicu
+
+            const shoulder = pose[S + 'Shoulder'];
+            const elbow = pose[S + 'Elbow'];
+            const wrist = pose[S + 'Wrist'];
+
+            // kąt łokcia
+            if (ok(shoulder) && ok(elbow) && ok(wrist)) {
+                const ang = angleDeg(
+                    { x: shoulder.x, y: shoulder.y },
+                    { x: elbow.x, y: elbow.y },
+                    { x: wrist.x, y: wrist.y }
+                );
+                if (ang != null) {
+                    elAngle.textContent = ang + '°';
+                    elAngle.style.color = (ang >= ANGLE_TARGET_MIN && ang <= ANGLE_TARGET_MAX) ? 'var(--ok)' : 'var(--bad)';
+                }
+            } else {
+                elAngle.textContent = '…';
+                elAngle.style.color = '';
+            }
+
+            // głowa (środek z ucha/oka/nosa)
+            const head = headCenter(pose);
+
+            // pozycja shakera przy głowie
+            if (head && ok(wrist)) {
+                const dx = wrist.x - head.x;
+                const dy = wrist.y - head.y;
+                const dist = Math.hypot(dx, dy);
+
+                const sideOK = Math.abs(dx) >= SIDE_MIN_OFFSET_PX; // nie centralnie przed twarzą
+                const levelOK = Math.abs(dy) <= VERT_TOLERANCE_PX; // wysokość ~głowy
+                const distOK = dist <= MAX_HEAD_DISTANCE_PX;       // w zasięgu „przy głowie”
+
+                let status, good;
+                if (sideOK && levelOK && distOK) {
+                    status = dx > 0 ? 'OK: po prawej stronie głowy' : 'OK: po lewej stronie głowy';
+                    good = true;
+                } else {
+                    status = 'ŹLE: przed twarzą lub poza strefą';
+                    good = false;
+                }
+                elShakerStatus.textContent = status;
+                elShakerStatus.style.color = good ? 'var(--ok)' : 'var(--bad)';
+                elWarn.style.display = good ? 'none' : 'block';
+
+                // wizual strefy przy głowie
+                p.push();
+                p.noFill();
+                p.stroke(good ? p.color(16, 185, 129) : p.color(239, 68, 68));
+                p.strokeWeight(2);
+                p.circle(head.x, head.y, MAX_HEAD_DISTANCE_PX);
+                p.stroke(255, 255, 255, 120);
+                // linie graniczne "nie-przed-twarzą"
+                p.line(head.x + SIDE_MIN_OFFSET_PX, head.y - VERT_TOLERANCE_PX, head.x + SIDE_MIN_OFFSET_PX, head.y + VERT_TOLERANCE_PX);
+                p.line(head.x - SIDE_MIN_OFFSET_PX, head.y - VERT_TOLERANCE_PX, head.x - SIDE_MIN_OFFSET_PX, head.y + VERT_TOLERANCE_PX);
+                p.pop();
+            } else {
+                elShakerStatus.textContent = '—';
+                elShakerStatus.style.color = '';
+                elWarn.style.display = 'none';
+            }
+
+            // TEMPO z nadgarstka mierzonej ręki
+            if (ok(wrist)) {
+                updateTempoFromWrist(wrist);
+            } else {
+                elBpm.textContent = '—';
+                elHz.textContent = '—';
+            }
+        }
+
+        // -------------------- POMOCNICZE --------------------
+        function ok(k) { return k && k.confidence > 0.5; }
+
+        // kąt w punkcie B (BA, BC), w stopniach
+        function angleDeg(A, B, C) {
+            const ab = { x: A.x - B.x, y: A.y - B.y };
+            const cb = { x: C.x - B.x, y: C.y - B.y };
+            const dot = ab.x * cb.x + ab.y * cb.y;
+            const magA = Math.hypot(ab.x, ab.y);
+            const magC = Math.hypot(cb.x, cb.y);
+            if (!magA || !magC) return null;
+            let cos = dot / (magA * magC);
+            cos = Math.max(-1, Math.min(1, cos));
+            return Math.round((Math.acos(cos) * 180) / Math.PI);
+        }
+
+        function headCenter(pose) {
+            const cand = [pose.leftEar, pose.rightEar, pose.nose, pose.leftEye, pose.rightEye].filter(ok);
+            if (!cand.length) return null;
+            let x = 0, y = 0;
+            cand.forEach(pt => { x += pt.x; y += pt.y; });
+            return { x: x / cand.length, y: y / cand.length };
+        }
+
+        // prosty detektor pików z Y nadgarstka
+        function updateTempoFromWrist(w) {
+            const t = performance.now();
+            wristHistory.push({ t, y: w.y });
+
+            const cutoff = t - MAX_HISTORY_MS;
+            while (wristHistory.length && wristHistory[0].t < cutoff) wristHistory.shift();
+            if (wristHistory.length < 5) return;
+
+            const n = wristHistory.length;
+            const a = wristHistory[n - 3], b = wristHistory[n - 2], c = wristHistory[n - 1];
+
+            // W układzie obrazu Y rośnie w dół, więc "szczyt" ruchu pionowego to lokalne minimum
+            const isPeak = (b.y < a.y && b.y < c.y) && (Math.max(a.y, c.y) - b.y) > PEAK_MIN_AMPLITUDE;
+
+            if (isPeak) {
+                const now = b.t;
+                if (!peakTimes.length || (now - peakTimes[peakTimes.length - 1]) > PEAK_DEBOUNCE_MS) {
+                    peakTimes.push(now);
+                    if (peakTimes.length > 6) peakTimes.shift();
+
+                    if (peakTimes.length >= 2) {
+                        const intervals = [];
+                        for (let i = 1; i < peakTimes.length; i++) intervals.push(peakTimes[i] - peakTimes[i - 1]);
+                        const avg = intervals.reduce((s, v) => s + v, 0) / intervals.length; // ms
+                        const bpm = Math.max(0, Math.min(300, 60000 / avg));
+                        const hz = bpm / 60;
+                        elBpm.textContent = bpm.toFixed(1);
+                        elHz.textContent = hz.toFixed(2);
+                        elBpm.dataset.hz = hz.toFixed(2);
+                    }
+                }
+            }
+        }
+
+        // start p5
+        new p5(sketch);
+    </script>
+</body>
+
+</html>

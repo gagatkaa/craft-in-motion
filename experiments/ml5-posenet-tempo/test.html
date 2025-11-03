@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 
 <head>
     <meta charset="UTF-8" />
@@ -12,31 +12,12 @@
     <!-- libs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
     <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
-    <style>
-        .warning-banner {
-            display: none;
-            margin: 8px 0;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-weight: 600;
-        }
-
-        #low-light-warning {
-            background: #fff3cd;
-            color: #7a5a00;
-        }
-
-        #safety-warning {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-    </style>
 </head>
 
 <body>
     <div class="container">
         <h1>PoseNet Live Tempo Tracker</h1>
-        <p><b>ML Experiment 1:</b> Tempo z nadgarstka + kontrola kąta łokcia trzymanej ręki.</p>
+        <p><b>ML Experiment 1:</b> Tempo z nadgarstka wybranej ręki i kontrola kąta łokcia przy shaku.</p>
 
         <!-- Camera Selection -->
         <div id="camera-selection-panel">
@@ -79,12 +60,9 @@
             </div>
         </div>
 
-        <!-- Warnings -->
+        <!-- Low light -->
         <div id="low-light-warning" class="warning-banner">
             ⚠️ Low Light Detected. Please increase illumination for better tracking.
-        </div>
-        <div id="safety-warning" class="warning-banner">
-            🛑 Nie zasłaniaj twarzy shakerem ani rękami. Odsuń sprzęt od linii wzroku.
         </div>
 
         <!-- Canvas -->
@@ -94,11 +72,12 @@
         <div class="info-panel">
             <h3>Logic:</h3>
             <ul>
-                <li>Tempo z wybranego nadgarstka (downbeat z ruchu w dół + filtr jitteru).</li>
-                <li>Kąt łokcia = kąt między wektorami <i>shoulder→elbow</i> i <i>wrist→elbow</i>.</li>
-                <li>Form OK, gdy kąt w domyślnym zakresie 75°–115° (możesz zmienić w stałych).</li>
-                <li>Przy łokciu rysujemy łuk: zielony (OK) / czerwony (Adjust).</li>
-                <li>Bezpieczeństwo: ostrzeżenie gdy dłonie lub shaker przecinają obszar twarzy.</li>
+                <li>Twardy wybór jednej ręki. Algorytm wybiera nadgarstek po stronie wybranej ręki według bliskości
+                    łokcia i barku oraz z histerezą.</li>
+                <li>Tempo z wybranego nadgarstka. Miganie na beat w miejscu faktycznie mierzonego punktu.</li>
+                <li>Kąt łokcia to kąt między shoulder→elbow i wrist→elbow. Rysujemy krótki łuk po stronie wewnętrznej.
+                </li>
+                <li>Domyślny zakres OK 75°–115°. Możesz zmienić w stałych.</li>
             </ul>
         </div>
     </div>
@@ -107,6 +86,13 @@
         // --- Global / UI ---
         let video, poseNet, poses = [], canvas, cameraSelect;
         let measuredHand = 'right'; // 'right' | 'left'
+
+        // Stabilny wybór nadgarstka dla wybranej ręki
+        let currentMeasuredWrist = null;   // {x,y,confidence,label}
+        let lastWristLabel = null;         // 'leftWrist' | 'rightWrist'
+        let lastWristPos = null;           // {x,y}
+        const WRIST_SIDE_PENALTY = 140;    // kara px za złą stronę
+        const WRIST_STICKY_BONUS = 0.8;    // premia dla poprzedniego wyboru
 
         // --- Tempo ---
         const WRIST_HISTORY_LENGTH = 30;
@@ -120,9 +106,13 @@
         let beatTimestamps = [];
         let lastFrameTime = 0;
 
+        // Miganie na beat
+        let blinkFrames = 0;
+        let blinkPos = null;
+
         // --- Elbow Angle ---
-        const ELBOW_OK_MIN = 10;
-        const ELBOW_OK_MAX = 75;
+        const ELBOW_OK_MIN = 75;
+        const ELBOW_OK_MAX = 115;
         const ANGLE_SMOOTHING = 5;
         let elbowAngleHistory = [];
 
@@ -132,107 +122,24 @@
         let lastLuminance = 0;
         const LOW_LIGHT_THRESHOLD = 50;
 
-        // --- Blink state ---
-        let blinkFrames = 0;
-        let lastBlinkPart = null;
-
         function wireHandSelection() {
             document.querySelectorAll('input[name="hand"]').forEach(r => {
                 r.addEventListener('change', e => {
                     measuredHand = e.target.value;
+                    // reset stanów pomiaru
                     wristYHistory = [];
                     beatTimestamps = [];
                     lastBeatTime = 0;
                     elbowAngleHistory = [];
+                    currentMeasuredWrist = null;
+                    lastWristLabel = null;
+                    lastWristPos = null;
                     document.getElementById('tempo-display').textContent = '0.0';
                     document.getElementById('elbow-angle').textContent = '—';
                     document.getElementById('form-status').textContent = '—';
                 });
             });
         }
-
-        // Cel: wykryć zasłanianie twarzy dłonią/shakerem trzymanym JEDNĄ lub obiema rękami.
-        // Działa w 2D: krąg twarzy (z oczu), test punktów (wrist/elbow/projekcja "tip")
-        // + test przecięcia odcinka elbow–wrist z kręgiem.
-        function checkHandsShakerInFrontOfFace(pose, opts = {}) {
-            if (!pose) return { isUnsafe: false, reason: "no-pose" };
-
-            const minConf = opts.minConf ?? 0.3;     // trochę niżej, bo oczy/nadgarstek bywa szumiący
-            const faceRadK = opts.faceRadK ?? 1.2;    // promień twarzy = faceRadK * odległość-oczu
-            const tipK = opts.tipK ?? 0.65;       // jak daleko "czubek ręki" wychodzi poza nadgarstek (wiel. przedramienia)
-            const useElbowIntersect = opts.useElbowIntersect ?? true;
-
-            // --- punkty twarzy
-            const L = pose.leftEye, R = pose.rightEye, N = pose.nose;
-            const conf = (k) => k && (k.confidence ?? k.score ?? 0) >= minConf;
-
-            // potrzebujemy przynajmniej oczu; nos poprawia środek
-            if (!conf(L) || !conf(R)) return { isUnsafe: false, reason: "no-face" };
-
-            const eyeDist = Math.hypot(L.x - R.x, L.y - R.y);
-            if (eyeDist < 2) return { isUnsafe: false, reason: "degenerate-face" };
-
-            // środek kręgu: między oczami lekko przesunięty w stronę nosa, jeśli jest
-            const cx = (L.x + R.x) / 2 * (N && conf(N) ? 0.5 : 1) + (N && conf(N) ? N.x * 0.5 : 0);
-            const cy = (L.y + R.y) / 2 * (N && conf(N) ? 0.5 : 1) + (N && conf(N) ? N.y * 0.5 : 0);
-            const faceR = faceRadK * eyeDist;
-
-            // --- pomocnicze
-            const dist2 = (a, b) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
-            const inFaceCircle = (p) => p && dist2(p, { x: cx, y: cy }) <= faceR * faceR;
-
-            // test przecięcia odcinka z okręgiem
-            const segCircleIntersect = (A, B, Cx, Cy, R) => {
-                // rzut punktu C na AB i clamp do [0,1]
-                const ABx = B.x - A.x, ABy = B.y - A.y;
-                const ACx = Cx - A.x, ACy = Cy - A.y;
-                const ab2 = ABx * ABx + ABy * ABy || 1e-6;
-                let t = (ACx * ABx + ACy * ABy) / ab2;
-                t = Math.max(0, Math.min(1, t));
-                const Px = A.x + t * ABx, Py = A.y + t * ABy;
-                const d2 = (Px - Cx) * (Px - Cx) + (Py - Cy) * (Py - Cy);
-                return d2 <= R * R;
-            };
-
-            // --- punkty kończyn
-            const rw = pose.rightWrist, lw = pose.leftWrist;
-            const re = pose.rightElbow, le = pose.leftElbow;
-
-            const offenders = [];
-
-            // 1) nadgarstki w kręgu twarzy
-            if (conf(rw) && inFaceCircle(rw)) offenders.push("rightWrist");
-            if (conf(lw) && inFaceCircle(lw)) offenders.push("leftWrist");
-
-            // 2) czubek ręki (projekcja o długości ~tipK * |wrist-elbow| w kierunku od łokcia przez nadgarstek)
-            const addTip = (wr, el, tag) => {
-                if (!conf(wr) || !conf(el)) return;
-                const vx = wr.x - el.x, vy = wr.y - el.y;
-                const len = Math.hypot(vx, vy) || 1e-6;
-                const tip = { x: wr.x + (vx / len) * (tipK * len), y: wr.y + (vy / len) * (tipK * len) };
-                if (inFaceCircle(tip)) offenders.push(tag);
-                return tip; // do debug-rysowania
-            };
-            const tipR = addTip(rw, re, "rightHandTip");
-            const tipL = addTip(lw, le, "leftHandTip");
-
-            // 3) odcinek łokieć–nadgarstek przecina krąg twarzy
-            if (useElbowIntersect) {
-                if (conf(rw) && conf(re) && segCircleIntersect(re, rw, cx, cy, faceR)) offenders.push("rightForearm");
-                if (conf(lw) && conf(le) && segCircleIntersect(le, lw, cx, cy, faceR)) offenders.push("leftForearm");
-            }
-
-            // 4) linia "shakera" (między nadgarstkami) przecina krąg
-            if (conf(rw) && conf(lw) && segCircleIntersect(lw, rw, cx, cy, faceR)) {
-                offenders.push("shakerLine");
-            }
-
-            const isUnsafe = offenders.length > 0;
-            const reason = isUnsafe ? "Ręce/butelka zasłaniają obszar twarzy" : "ok";
-
-            return { isUnsafe, reason, faceCircle: { cx, cy, r: faceR }, offenders, tips: { tipR, tipL } };
-        }
-
 
         // --- p5 sketch ---
         const sketch = (p) => {
@@ -348,60 +255,89 @@
                     lastLuminance < LOW_LIGHT_THRESHOLD ? 'block' : 'none';
             };
 
+            // stabilne przypisanie jednego nadgarstka do wybranej ręki
+            p.pickMeasuredWrist = (pose) => {
+                const side = measuredHand; // 'left' | 'right'
+                const targetElbow = pose[side + 'Elbow'];
+                const targetShoulder = pose[side + 'Shoulder'];
+                const leftWrist = pose.leftWrist;
+                const rightWrist = pose.rightWrist;
+
+                if (!targetElbow || !targetShoulder ||
+                    targetElbow.confidence < 0.3 || targetShoulder.confidence < 0.3) {
+                    return null;
+                }
+
+                // środek ciała
+                let midX;
+                if (pose.leftShoulder?.confidence > 0.3 && pose.rightShoulder?.confidence > 0.3) {
+                    midX = (pose.leftShoulder.x + pose.rightShoulder.x) / 2;
+                } else if (pose.nose?.confidence > 0.3) {
+                    midX = pose.nose.x;
+                } else {
+                    midX = targetShoulder.x;
+                }
+
+                const candidates = [];
+                if (leftWrist?.confidence > 0.2) candidates.push({ label: 'leftWrist', kp: leftWrist });
+                if (rightWrist?.confidence > 0.2) candidates.push({ label: 'rightWrist', kp: rightWrist });
+
+                if (!candidates.length) return null;
+
+                const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+                candidates.forEach(c => {
+                    const toElbow = dist(c.kp, targetElbow);
+                    const toShoulder = dist(c.kp, targetShoulder);
+                    let penalty = 0;
+                    const isRightSide = c.kp.x > midX;
+                    if (side === 'right' && !isRightSide) penalty += WRIST_SIDE_PENALTY;
+                    if (side === 'left' && isRightSide) penalty += WRIST_SIDE_PENALTY;
+
+                    c.score = toElbow + 0.5 * toShoulder + penalty;
+
+                    // histereza
+                    if (lastWristLabel && c.label === lastWristLabel) {
+                        c.score *= WRIST_STICKY_BONUS;
+                        if (lastWristPos) c.score *= (1 - Math.min(dist(c.kp, lastWristPos) / 200, 0.2));
+                    }
+                });
+
+                candidates.sort((a, b) => a.score - b.score);
+                const chosen = candidates[0];
+
+                lastWristLabel = chosen.label;
+                lastWristPos = { x: chosen.kp.x, y: chosen.kp.y };
+                return { x: chosen.kp.x, y: chosen.kp.y, confidence: chosen.kp.confidence, label: chosen.label };
+            };
+
             p.drawPoseData = () => {
                 const now = p.millis();
-                const safetyBanner = document.getElementById('safety-warning');
-                let unsafe = null;
 
                 if (poses.length > 0) {
                     const pose = poses[0].pose;
+
+                    // wybierz stabilnie JEDEN nadgarstek dla wybranej strony
+                    currentMeasuredWrist = p.pickMeasuredWrist(pose);
+
                     p.drawKeypoints(pose);
                     p.drawSkeleton(poses[0].skeleton);
 
                     // Tempo
-                    p.calculateTempo(pose, now);
+                    p.calculateTempo(pose, now, currentMeasuredWrist);
 
                     // Elbow angle + overlay
                     p.calculateElbowAngle(pose);
-
-                    // Safety check – wykrywanie dłoni/shakera przed twarzą
-                    const res = checkHandsShakerInFrontOfFace(pose, {
-                        minConf: 0.35,
-                        faceRadK: 1.5,     // powiększ do 1.1–1.2, jeśli nie łapie
-                        tipK: 0.8,          // zwiększ do 1.0 dla dłuższej butelki
-                        useElbowIntersect: true
-                    });
-                    unsafe = res;
-
-                    // Pokaż baner, jeśli zasłaniasz twarz
-                    safetyBanner.style.display = res.isUnsafe ? 'block' : 'none';
-
-                    // --- DEBUG: podgląd kręgu twarzy + czubków dłoni ---
-                    if (res.faceCircle) {
-                        p.push();
-                        p.noFill();
-                        p.stroke(res.isUnsafe ? '#ef4444' : '#22c55e');
-                        p.strokeWeight(2);
-                        p.circle(res.faceCircle.cx, res.faceCircle.cy, res.faceCircle.r * 2);
-                        p.pop();
-                    }
-                    if (res.tips?.tipR) {
-                        p.push(); p.noStroke(); p.fill('#f59e0b');
-                        p.circle(res.tips.tipR.x, res.tips.tipR.y, 8); p.pop();
-                    }
-                    if (res.tips?.tipL) {
-                        p.push(); p.noStroke(); p.fill('#f59e0b');
-                        p.circle(res.tips.tipL.x, res.tips.tipL.y, 8); p.pop();
-                    }
-
                 } else {
                     document.getElementById('tempo-display').textContent = '0.0';
                     document.getElementById('elbow-angle').textContent = '—';
                     document.getElementById('form-status').textContent = '—';
-                    safetyBanner.style.display = 'none';
                     lastBeatTime = now;
                     beatTimestamps = [];
                     elbowAngleHistory = [];
+                    currentMeasuredWrist = null;
+                    lastWristLabel = null;
+                    lastWristPos = null;
                 }
 
                 if (now - lastBeatTime > STATIC_RESET_THRESHOLD_MS) {
@@ -416,14 +352,16 @@
                 p.text(`Light: ${p.nf(lastLuminance, 0, 1)} | FPS: ${p.nf(p.frameRate(), 0, 1)}`, 10, VIDEO_HEIGHT - 15);
             };
 
-            // --- Tempo from selected wrist ---
-            p.calculateTempo = (pose, now) => {
-                const wristName = measuredHand + 'Wrist';
-                const wrist = pose[wristName];
+            // --- Tempo tylko z currentMeasuredWrist ---
+            p.calculateTempo = (pose, now, measured) => {
                 const tempoDisplay = document.getElementById('tempo-display');
-                if (!wrist || wrist.confidence < 0.5) { tempoDisplay.textContent = '...'; return; }
 
-                const y = wrist.y;
+                if (!measured || measured.confidence < 0.5) {
+                    tempoDisplay.textContent = '...';
+                    return;
+                }
+
+                const y = measured.y;
                 wristYHistory.push(y);
                 if (wristYHistory.length > WRIST_HISTORY_LENGTH) wristYHistory.shift();
 
@@ -455,13 +393,20 @@
                                 const bpm = 60000 / avg;
                                 tempoDisplay.textContent = p.nf(p.constrain(bpm, 0, 1500), 0, 1);
                             }
-                            p.blinkKeypoint(wristName);
+
+                            p.blinkMeasured(measured.x, measured.y);
                         }
                     }
                 }
             };
 
-            // --- Elbow angle for measured hand ---
+            // miganie przy measured wrist
+            p.blinkMeasured = (x, y) => {
+                blinkFrames = 10;
+                blinkPos = { x, y };
+            };
+
+            // --- Elbow angle dla wybranej ręki, rysowanie krótkiego łuku po dwusiecznej ---
             p.calculateElbowAngle = (pose) => {
                 const shoulder = pose[measuredHand + 'Shoulder'];
                 const elbow = pose[measuredHand + 'Elbow'];
@@ -477,19 +422,17 @@
                     return;
                 }
 
-                // wektory do łokcia
+                // wektory z łokcia
                 let v1x = shoulder.x - elbow.x, v1y = shoulder.y - elbow.y;  // ramię
-                let v2x = wrist.x - elbow.x, v2y = wrist.y - elbow.y;        // przedramię
+                let v2x = wrist.x - elbow.x, v2y = wrist.y - elbow.y;  // przedramię
 
-                // normalizacja
                 const m1 = Math.hypot(v1x, v1y), m2 = Math.hypot(v2x, v2y);
                 if (m1 === 0 || m2 === 0) { angleEl.textContent = '—'; formEl.textContent = '—'; return; }
                 v1x /= m1; v1y /= m1; v2x /= m2; v2y /= m2;
 
-                // kąt między wektorami (0..180)
                 let dot = v1x * v2x + v1y * v2y;
                 dot = Math.max(-1, Math.min(1, dot));
-                let angleDeg = Math.acos(dot) * (180 / Math.PI);
+                let angleDeg = Math.acos(dot) * (180 / Math.PI); // 0..180, zawsze kąt między wektorami
 
                 // wygładzanie
                 elbowAngleHistory.push(angleDeg);
@@ -500,7 +443,7 @@
                 const ok = avgAngle >= ELBOW_OK_MIN && avgAngle <= ELBOW_OK_MAX;
                 formEl.textContent = ok ? 'OK' : 'Adjust';
 
-                // rysowanie łuku
+                // łuk po dwusiecznej
                 p.drawElbowArc(elbow.x, elbow.y, v1x, v1y, v2x, v2y, ok);
             };
 
@@ -512,8 +455,9 @@
                 while (diff <= -Math.PI) diff += 2 * Math.PI;
                 while (diff > Math.PI) diff -= 2 * Math.PI;
 
-                const sweep = Math.abs(diff);
+                const sweep = Math.abs(diff); // wewnętrzny kąt 0..PI
 
+                // dwusieczna kierunek u+w, fallback gdy przeciwne
                 let bx = u_x + w_x, by = u_y + w_y;
                 let bm = Math.hypot(bx, by);
                 if (bm < 1e-6) {
@@ -537,8 +481,7 @@
                 p.pop();
             };
 
-            p.blinkKeypoint = (part) => { blinkFrames = 10; lastBlinkPart = part; };
-
+            // rysowanie punktów i overlay dla measured wrist
             p.drawKeypoints = (pose) => {
                 const tracked = ['nose', 'leftEye', 'rightEye', 'leftEar', 'rightEar', 'leftShoulder', 'rightShoulder', 'leftElbow', 'rightElbow', 'leftWrist', 'rightWrist'];
                 p.strokeWeight(0);
@@ -547,22 +490,30 @@
                     const part = k.part;
                     if (k.score > 0.3 && tracked.includes(part)) {
                         p.fill(49, 75, 237);
-                        let size = 12;
-                        const measuredPart = measuredHand + 'Wrist';
-                        if (part === measuredPart && part === lastBlinkPart && blinkFrames > 0) {
-                            p.fill(239, 68, 68);
-                            size = 25;
-                            blinkFrames--;
-                        } else if (blinkFrames <= 0) {
-                            lastBlinkPart = null;
-                        }
-                        p.ellipse(k.position.x, k.position.y, size, size);
-
-                        if (part === measuredPart) {
-                            p.fill(255); p.textSize(10); p.textAlign(p.CENTER, p.CENTER);
-                            p.text('BPM', k.position.x, k.position.y + 2);
-                        }
+                        p.ellipse(k.position.x, k.position.y, 10, 10);
                     }
+                }
+
+                // overlay tylko dla aktualnie mierzonego nadgarstka
+                if (currentMeasuredWrist) {
+                    const x = currentMeasuredWrist.x;
+                    const y = currentMeasuredWrist.y;
+
+                    if (blinkFrames > 0 && blinkPos) {
+                        p.fill(239, 68, 68);
+                        p.noStroke();
+                        p.ellipse(blinkPos.x, blinkPos.y, 25, 25);
+                        blinkFrames--;
+                    }
+
+                    p.fill(49, 75, 237);
+                    p.noStroke();
+                    p.ellipse(x, y, 12, 12);
+
+                    p.fill(255);
+                    p.textSize(10);
+                    p.textAlign(p.CENTER, p.CENTER);
+                    p.text('BPM', x, y + 2);
                 }
             };
 
