@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 
 <head>
     <meta charset="utf-8" />
-    <title>Smile detector — production mode</title>
+    <title>Smile Detector — Production Mode</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
         :root {
@@ -75,17 +75,16 @@
 
 <body>
     <main>
-        <h1 style="text-align:center">Smile detector — produkcja</h1>
-        <p class="muted">Model ładowany z folderu <code>/models</code>. Uruchom przez http://localhost lub HTTPS.</p>
+        <h1 style="text-align:center">Smile Detector — Production</h1>
+        <p class="muted">Model loaded from the <code>/models</code> folder.</p>
 
         <div class="cam">
             <video id="video" autoplay playsinline muted></video>
             <canvas id="overlay" width="560" height="420"></canvas>
-            <div class="badge mid" id="liveLabel">Inicjalizacja…</div>
+            <div class="badge mid" id="liveLabel">Initializing…</div>
         </div>
     </main>
 
-    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
     <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
     <script>
         if (window.__SMILE_PROD_STARTED__) {
@@ -102,12 +101,12 @@
             let predictions = [];
             let nn;
 
-            // --- Kalibracja zbierana po LICZBIE KLATEK, nie po czasie ---
+            // --- Calibration gathered by FRAME COUNT, not time ---
             let baselineEAR = null;
             let calibSum = 0, calibN = 0;
             let calibrated = false;
-            const CALIB_REQUIRED_FRAMES = 20; // ile klatek z twarzą chcemy zebrać na neutral
-            let modelReady = false; // dopiero po wczytaniu modelu klasyfikujemy
+            const CALIB_REQUIRED_FRAMES = 20; // how many frames with face we need to gather for neutral
+            let modelReady = false; // only classify after model is loaded
 
             const IDX = {
                 mouthL: 61, mouthR: 291, mouthUp: 13, mouthDn: 14,
@@ -117,7 +116,7 @@
 
             init().catch(e => {
                 console.error(e);
-                alert('Uruchom przez localhost lub HTTPS i zezwól na kamerę.');
+                alert('Run via localhost or HTTPS and allow camera access.');
             });
 
             async function init() {
@@ -126,7 +125,7 @@
                 await new Promise(r => video.onloadedmetadata = r);
 
                 facemesh = ml5.facemesh(video, () => {
-                    liveLabel.textContent = 'Ładowanie modelu klasyfikatora…';
+                    liveLabel.textContent = 'Loading classifier model…';
                 });
                 predictHandler = (res) => { predictions = res; draw(); };
                 facemesh.on('predict', predictHandler);
@@ -138,11 +137,11 @@
                     weights: 'models/model.weights.bin'
                 }, () => {
                     modelReady = true;
-                    // Reset kalibracji i komunikat
+                    // Reset calibration and message
                     baselineEAR = null;
                     calibSum = 0; calibN = 0; calibrated = false;
                     liveLabel.className = 'badge mid';
-                    liveLabel.textContent = `Kalibracja oczu… patrz neutralnie (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+                    liveLabel.textContent = `Eye calibration… look neutral (${calibN}/${CALIB_REQUIRED_FRAMES})`;
                 });
             }
 
@@ -150,13 +149,13 @@
                 ctx.clearRect(0, 0, overlay.width, overlay.height);
 
                 if (!predictions || predictions.length === 0) {
-                    // brak twarzy
+                    // no face
                     if (!calibrated) {
                         liveLabel.className = 'badge mid';
-                        liveLabel.textContent = `Kalibracja: brak twarzy (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+                        liveLabel.textContent = `Calibration: no face (${calibN}/${CALIB_REQUIRED_FRAMES})`;
                     } else {
                         liveLabel.className = 'badge mid';
-                        liveLabel.textContent = 'Brak twarzy w kadrze';
+                        liveLabel.textContent = 'No face in frame';
                     }
                     return;
                 }
@@ -165,24 +164,24 @@
                 const S = smileWidthRatio(kp);
                 const EAR = (eyeAspectRatioL(kp) + eyeAspectRatioR(kp)) / 2;
 
-                // rysunek pomocniczy (możesz wyłączyć dla większej wydajności)
+                // helper drawing (can be disabled for performance)
                 strokePath([IDX.mouthL, IDX.mouthUp, IDX.mouthR, IDX.mouthDn], kp);
                 strokePath([IDX.eyeL_h1, IDX.eyeL_v1, IDX.eyeL_h2, IDX.eyeL_v2], kp);
                 strokePath([IDX.eyeR_h1, IDX.eyeR_v1, IDX.eyeR_h2, IDX.eyeR_v2], kp);
 
-                // --- Kalibracja po liczbie klatek z twarzą ---
+                // --- Calibration by frame count with face ---
                 if (modelReady && !calibrated) {
                     calibSum += EAR; calibN++;
                     liveLabel.className = 'badge mid';
-                    liveLabel.textContent = `Kalibracja oczu… patrz neutralnie (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+                    liveLabel.textContent = `Eye calibration… look neutral (${calibN}/${CALIB_REQUIRED_FRAMES})`;
 
                     if (calibN >= CALIB_REQUIRED_FRAMES) {
                         baselineEAR = calibSum / calibN;
                         calibrated = true;
                         liveLabel.className = 'badge mid';
-                        liveLabel.textContent = 'Gotowe. Patrz w kamerę i uśmiechnij się.';
+                        liveLabel.textContent = 'Ready. Look at the camera and smile.';
                     }
-                    return; // do czasu kalibracji nie klasyfikujemy
+                    return; // don’t classify until calibration done
                 }
 
                 if (!modelReady || !calibrated) return;
@@ -196,10 +195,10 @@
                     const conf = Math.round(top.confidence * 100);
                     if (label === 'real') {
                         liveLabel.className = 'badge good';
-                        liveLabel.textContent = `Prawdziwszy uśmiech ${conf}%`;
+                        liveLabel.textContent = `Genuine smile ${conf}%`;
                     } else if (label === 'fake') {
                         liveLabel.className = 'badge bad';
-                        liveLabel.textContent = `Sztuczny uśmiech ${conf}%`;
+                        liveLabel.textContent = `Fake smile ${conf}%`;
                     } else {
                         liveLabel.className = 'badge mid';
                         liveLabel.textContent = `${label} ${conf}%`;
@@ -238,7 +237,6 @@
             }
         }
     </script>
-
 </body>
 
 </html>

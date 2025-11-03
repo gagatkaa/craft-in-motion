@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 
 <head>
     <meta charset="utf-8" />
-    <title>Smile trainer — zbieranie, trening, zapis i wczytanie modelu</title>
+    <title>Smile Trainer — Collect, Train, Save & Load Model</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
         :root {
@@ -15,23 +15,24 @@
             font-family: system-ui, sans-serif;
             background: #0e1116;
             color: #e9eef3;
+            font-size: 1rem;
         }
 
         main {
-            max-width: 980px;
+            max-width: 62rem;
             margin: 24px auto;
             padding: 16px;
         }
 
         h1 {
-            font-size: 20px;
+            font-size: 1.2rem;
             margin: 0 0 12px;
         }
 
         .grid {
             display: grid;
-            grid-template-columns: 560px 1fr;
-            gap: 16px;
+            grid-template-columns: 35rem 1fr;
+            gap: 1rem;
             align-items: start;
         }
 
@@ -91,6 +92,10 @@
             margin-bottom: 8px;
         }
 
+        #train button {
+            background-color: rgb(98, 143, 13);
+        }
+
         button {
             padding: 10px 14px;
             border-radius: 10px;
@@ -115,10 +120,11 @@
         }
 
         .pill {
-            background: #0f1522;
+            background: #0b4374;
             border: 1px solid #24314b;
             padding: 6px 10px;
-            border-radius: 999px;
+            border-radius: 100rem;
+            text-align: center;
         }
 
         input[type="file"] {
@@ -142,59 +148,47 @@
 
 <body>
     <main>
-        <h1>Własny klasyfikator uśmiechu: trening + zapis + wczytanie</h1>
+        <h1>Custom Smile Classifier: Train + Save + Load</h1>
 
         <div class="grid">
             <div class="cam">
                 <video id="video" autoplay playsinline muted></video>
                 <canvas id="overlay" width="560" height="420"></canvas>
-                <div class="badge mid" id="liveLabel">Kalibracja oczu nie zrobiona</div>
+                <div class="badge mid" id="liveLabel">Eye calibration not done</div>
             </div>
 
             <div class="panel">
-                <p class="muted">Kroki: 1) Kalibruj neutral oczu 2) zbierz próbki „Sztuczny” i „Prawdziwy” 3) Trenuj 4)
-                    Zapisz model lub wczytaj model i testuj.</p>
+                <p class="muted">Steps: <br />
+                    1) Calibrate neutral eyes <br />
+                    2) Collect samples “Fake” and “Real” <br />
+                    3) Train <br />
+                    4) Save the model or load one and test.</p>
 
-                <div class="row">
-                    <button id="btnCalib">Kalibruj neutral oczu</button>
-                    <button id="btnAddFake">+ Próbka: Sztuczny</button>
-                    <button id="btnAddReal">+ Próbka: Prawdziwy</button>
-                    <button id="btnTrain">Trenuj</button>
+                <div class="row" id="train">
+                    <button id="btnCalib">Calibrate neutral eyes</button>
+                    <button id="btnAddFake">+ Sample: Fake</button>
+                    <button id="btnAddReal">+ Sample: Real</button>
+                    <button id="btnTrain">Train</button>
                 </div>
 
                 <div class="row">
-                    <button id="btnSave">Zapisz model (pobierz pliki)</button>
-                    <button id="btnLoadFolder">Wczytaj model z folderu /models</button>
+                    <button id="btnSave">Save model (download files)</button>
+                    <button id="btnLoadFolder">Load model from /models folder</button>
                     <label class="file">
-                        Wczytaj model z plików
+                        Load model from files
                         <input id="fileInput" type="file" multiple accept=".json,.bin" />
                     </label>
                 </div>
 
                 <div class="row">
-                    <button id="btnReset">Reset modelu</button>
+                    <button id="btnReset">Reset model</button>
                 </div>
 
                 <div class="counts">
                     <div class="pill">fake: <span id="cntFake">0</span></div>
                     <div class="pill">real: <span id="cntReal">0</span></div>
-                    <div class="pill">status: <span id="status">inicjalizacja…</span></div>
+                    <div class="pill">status: <span id="status">initializing…</span></div>
                 </div>
-
-                <p id="readout" class="muted">Metryki pojawią się tutaj.</p>
-                <p class="muted">Uruchom przez http://localhost lub HTTPS. Kamera nie działa z file://.</p>
-                <details class="muted">
-                    <summary>Struktura katalogu</summary>
-                    <pre>
-project/
-  index-train.html
-  index-prod.html
-  models/
-    model.json
-    model_meta.json
-    model.weights.bin
-        </pre>
-                </details>
             </div>
         </div>
     </main>
@@ -243,17 +237,17 @@ project/
 
             init().catch(e => {
                 console.error(e);
-                alert('Kamera lub ml5 nie działają. Uruchom przez localhost lub HTTPS i zezwól na kamerę.');
+                alert('Camera or ml5 not working. Run via localhost or HTTPS and allow camera access.');
             });
 
             async function init() {
-                statusEl.textContent = 'proszę o dostęp do kamerki…';
+                statusEl.textContent = 'requesting camera access…';
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 560, height: 420 } });
                 video.srcObject = stream;
                 await new Promise(r => video.onloadedmetadata = r);
 
                 facemesh = ml5.facemesh(video, () => {
-                    statusEl.textContent = 'facemesh gotowy. Zrób kalibrację oczu.';
+                    statusEl.textContent = 'facemesh ready. Do eye calibration.';
                 });
                 predictHandler = results => { predictions = results; draw(); };
                 facemesh.on('predict', predictHandler);
@@ -267,8 +261,8 @@ project/
                 btnReset.onclick = resetModel;
 
                 btnSave.onclick = () => {
-                    if (!trained) { alert('Wytrenuj model zanim zapiszesz.'); return; }
-                    nn.save(); // pobierze 3 pliki
+                    if (!trained) { alert('Train the model before saving.'); return; }
+                    nn.save(); // downloads 3 files
                 };
 
                 btnLoadFolder.onclick = () => {
@@ -278,16 +272,16 @@ project/
                         weights: 'models/model.weights.bin'
                     }, () => {
                         trained = true;
-                        statusEl.textContent = 'model wczytany z /models';
+                        statusEl.textContent = 'model loaded from /models';
                     });
                 };
 
                 fileInput.onchange = async (e) => {
                     const files = Array.from(e.target.files);
-                    // ml5 sam rozpozna które pliki są które
+                    // ml5 automatically recognizes the correct files
                     nn.load(files, () => {
                         trained = true;
-                        statusEl.textContent = 'model wczytany z wybranych plików';
+                        statusEl.textContent = 'model loaded from selected files';
                     });
                 };
             }
@@ -297,18 +291,18 @@ project/
                 baselineEAR = null;
                 calibSum = 0; calibN = 0;
                 liveLabel.className = 'badge mid';
-                liveLabel.textContent = 'Kalibracja neutralu. Patrz spokojnie 1-2 s';
-                statusEl.textContent = 'kalibracja oczu…';
+                liveLabel.textContent = 'Neutral calibration. Look calmly for 1–2 seconds';
+                statusEl.textContent = 'eye calibration…';
                 setTimeout(() => {
                     if (calibN > 10) {
                         baselineEAR = calibSum / calibN;
                         calibActive = false;
-                        statusEl.textContent = 'kalibracja OK. Zbieraj próbki.';
-                        liveLabel.textContent = 'Kalibracja OK. Zbieraj próbki.';
+                        statusEl.textContent = 'calibration OK. Collect samples.';
+                        liveLabel.textContent = 'Calibration OK. Collect samples.';
                     } else {
                         calibActive = false;
-                        statusEl.textContent = 'kalibracja nieudana. Spróbuj ponownie.';
-                        liveLabel.textContent = 'Kalibracja nieudana.';
+                        statusEl.textContent = 'calibration failed. Try again.';
+                        liveLabel.textContent = 'Calibration failed.';
                     }
                 }, 1200);
             }
@@ -317,7 +311,7 @@ project/
                 ctx.clearRect(0, 0, overlay.width, overlay.height);
                 if (!predictions || predictions.length === 0) {
                     liveLabel.className = 'badge mid';
-                    liveLabel.textContent = 'Brak twarzy w kadrze';
+                    liveLabel.textContent = 'No face in frame';
                     return;
                 }
 
@@ -340,18 +334,18 @@ project/
                         const top = res[0];
                         const label = top.label;
                         const conf = Math.round(top.confidence * 100);
-                        if (label === 'real') { liveLabel.className = 'badge good'; liveLabel.textContent = `Prawdziwszy uśmiech (${conf}%)`; }
-                        else if (label === 'fake') { liveLabel.className = 'badge bad'; liveLabel.textContent = `Sztuczny uśmiech (${conf}%)`; }
+                        if (label === 'real') { liveLabel.className = 'badge good'; liveLabel.textContent = `Genuine smile (${conf}%)`; }
+                        else if (label === 'fake') { liveLabel.className = 'badge bad'; liveLabel.textContent = `Fake smile (${conf}%)`; }
                         else { liveLabel.className = 'badge mid'; liveLabel.textContent = `${label} (${conf}%)`; }
                     });
                 } else {
-                    if (baselineEAR == null) { liveLabel.className = 'badge mid'; liveLabel.textContent = 'Najpierw kalibracja oczu.'; }
-                    else { liveLabel.className = 'badge mid'; liveLabel.textContent = 'Dodaj próbki i trenuj model.'; }
+                    if (baselineEAR == null) { liveLabel.className = 'badge mid'; liveLabel.textContent = 'Calibrate eyes first.'; }
+                    else { liveLabel.className = 'badge mid'; liveLabel.textContent = 'Add samples and train the model.'; }
                 }
             }
 
             function captureSample(label) {
-                if (baselineEAR == null) { alert('Najpierw kalibracja oczu.'); return; }
+                if (baselineEAR == null) { alert('Calibrate eyes first.'); return; }
                 if (!predictions || predictions.length === 0) return;
 
                 const kp = predictions[0].scaledMesh;
@@ -362,19 +356,19 @@ project/
                 nn.addData({ S, dEAR }, { label });
                 if (label === 'fake') { nFake++; cntFake.textContent = nFake; }
                 if (label === 'real') { nReal++; cntReal.textContent = nReal; }
-                statusEl.textContent = `dodano próbkę: ${label}`;
+                statusEl.textContent = `sample added: ${label}`;
             }
 
             function trainModel() {
-                if ((nFake + nReal) < 12) { alert('Zbierz więcej próbek. Minimum 6+6. Lepiej 20–30 na klasę.'); return; }
-                statusEl.textContent = 'normalizacja…';
+                if ((nFake + nReal) < 12) { alert('Collect more samples. Minimum 6+6, ideally 20–30 per class.'); return; }
+                statusEl.textContent = 'normalizing…';
                 nn.normalizeData();
-                statusEl.textContent = 'trening…';
+                statusEl.textContent = 'training…';
                 nn.train({ epochs: 60, batchSize: 16 }, (epoch, loss) => {
-                    statusEl.textContent = `epoka ${epoch}/60 — loss: ${loss?.loss?.toFixed(4) ?? '—'}`;
+                    statusEl.textContent = `epoch ${epoch}/60 — loss: ${loss?.loss?.toFixed(4) ?? '—'}`;
                 }, () => {
                     trained = true;
-                    statusEl.textContent = 'model wytrenowany';
+                    statusEl.textContent = 'model trained';
                 });
             }
 
@@ -382,7 +376,7 @@ project/
                 nn = ml5.neuralNetwork({ task: 'classification', debug: false, learningRate: 0.2, hiddenUnits: 8 });
                 trained = false;
                 nFake = 0; nReal = 0; cntFake.textContent = '0'; cntReal.textContent = '0';
-                statusEl.textContent = 'model zresetowany. Zbierz próbki i trenuj ponownie';
+                statusEl.textContent = 'model reset. Collect samples and train again.';
             }
 
             function smileWidthRatio(pts) {
