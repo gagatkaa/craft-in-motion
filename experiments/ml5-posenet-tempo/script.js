@@ -27,7 +27,7 @@ let elbowAngleHistory = [];
 const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
 let lastLuminance = 0;
-const LOW_LIGHT_THRESHOLD = 50;
+const LOW_LIGHT_THRESHOLD = 40;
 
 // Blink (tempo feedback)
 let blinkFrames = 0;
@@ -36,6 +36,32 @@ let lastBlinkPart = null;
 // Safety banner hold
 let unsafeUntil = 0;
 const UNSAFE_HOLD_MS = 600;
+// --- ADAPTIVE THRESHOLDS BY SCALE ---
+function clamp(v, a, b) {
+  return Math.min(Math.max(v, a), b);
+}
+
+function getShoulderDist(dict) {
+  const L = dict?.leftShoulder;
+  const R = dict?.rightShoulder;
+  const conf = (k) => k?.confidence ?? k?.score ?? 0;
+  if (!L || !R || conf(L) < 0.2 || conf(R) < 0.2) return null;
+  return Math.hypot(L.x - R.x, L.y - R.y);
+}
+
+// rozmiar „blisko kamery” (w px między barkami). 200 to sensowny start dla 640×480 wyświetlania.
+const SHOULDER_BASE = 200;
+
+function dynamicThresholds(dict) {
+  const dist = getShoulderDist(dict) || SHOULDER_BASE;
+  // im mniejszy dystans barków → jesteś dalej → skala rośnie
+  const scale = clamp(SHOULDER_BASE / dist, 0.6, 3.0);
+  return {
+    MIN_MOVE: Math.round(MIN_MOVEMENT_THRESHOLD * scale),
+    JITTER: Math.round(JITTER_MOVEMENT_THRESHOLD * scale),
+    minConfForArm: clamp(0.5 - (scale - 1) * 0.12, 0.3, 0.5), // obniż lekko wymagany conf
+  };
+}
 
 // --- SIMPLE FACE HIT-TEST ---
 function checkHandsShakerInFrontOfFace(pose, opts = {}) {
@@ -104,7 +130,55 @@ function checkHandsShakerInFrontOfFace(pose, opts = {}) {
   const isUnsafe = offenders.length > 0;
   return { isUnsafe, faceRect, offenders, tips: { tipR, tipL } };
 }
+// Lock processing to the measured hand by zeroing the opposite side joints.
+const LOCK_HAND = true;
+function lockToMeasuredHand(pose, hand) {
+  if (!pose) return pose;
+  const opp = hand === "right" ? "left" : "right";
+  // zero-out confidence/score on the opposite arm joints
+  ["Shoulder", "Elbow", "Wrist"].forEach((J) => {
+    const k = pose[opp + J];
+    if (k) {
+      // ml5 sometimes uses .confidence, sometimes .score; set both to be safe
+      k.confidence = 0;
+      k.score = 0;
+    }
+  });
+  return pose;
+}
+// Turn pose.keypoints[] into a dictionary: { rightWrist: {x,y,score}, ... }
+function asDict(pose) {
+  const d = {};
+  if (!pose?.keypoints) return d;
+  for (const k of pose.keypoints) {
+    d[k.part] = {
+      x: k.position.x,
+      y: k.position.y,
+      score: k.score ?? k.confidence ?? 0,
+      confidence: k.score ?? k.confidence ?? 0,
+    };
+  }
+  // also alias names like 'rightWrist' etc. (ml5 parts already match these)
+  return d;
+}
 
+// Safe getter for a body part with a min confidence
+function getPart(dict, part, min = 0.4) {
+  const k = dict?.[part];
+  return k && (k.score ?? 0) >= min ? k : null;
+}
+
+// Pairs for one arm skeleton
+const ARM_LINKS = {
+  right: [
+    ["rightShoulder", "rightElbow"],
+    ["rightElbow", "rightWrist"],
+  ],
+  left: [
+    ["leftShoulder", "leftElbow"],
+    ["leftElbow", "leftWrist"],
+  ],
+};
 const sketch = (p) => {
   p.setup = () => {
     canvas = p.createCanvas(VIDEO_WIDTH, VIDEO_HEIGHT);
@@ -197,7 +271,13 @@ const sketch = (p) => {
     }
     poseNet = ml5.poseNet(
       video,
-      { flipHorizontal: true, detectionType: "single" },
+      {
+        flipHorizontal: true,
+        detectionType: "single",
+        inputResolution: 513, // kluczowe przy „małej” sylwetce
+        multiplier: 0.75, // 1.0 jeszcze dokładniej, ale wolniej
+        stride: 16, // alias outputStride w części buildów ml5
+      },
       p.modelReady
     );
     poseNet.on("pose", p.gotPoses);
@@ -273,15 +353,22 @@ const sketch = (p) => {
     const safetyBanner = document.getElementById("safety-warning");
 
     if (poses.length > 0) {
-      const pose = poses[0].pose;
-      p.drawKeypoints(pose);
-      p.drawSkeleton(poses[0].skeleton);
+      // Build a dict view and use ONLY the selected hand downstream
+      const rawPose = poses[0].pose;
+      const dict = asDict(rawPose);
 
-      p.calculateTempo(pose, now);
+      // Draw only selected arm keypoints
+      p.drawKeypoints(dict);
 
-      p.calculateElbowAngle(pose);
+      // Draw only selected arm skeleton
+      p.drawSelectedArmSkeleton(dict, measuredHand);
 
-      const res = checkHandsShakerInFrontOfFace(pose, {
+      // Calculations use dict restricted by measuredHand
+      p.calculateTempo(dict, now);
+      p.calculateElbowAngle(dict);
+
+      // Safety also reads from dict (eyes/nose + both wrists/elbows are present in dict)
+      const res = checkHandsShakerInFrontOfFace(dict, {
         minConf: 0.35,
         padK: 0.8,
         tipK: 0.75,
@@ -329,34 +416,46 @@ const sketch = (p) => {
     }
   };
 
-  p.calculateTempo = (pose, now) => {
-    const wristName = measuredHand + "Wrist";
-    const wrist = pose[wristName];
+  p.calculateTempo = (dict, now) => {
+    // 1) NAJPIERW pobierz element HUD
     const tempoDisplay = document.getElementById("tempo-display");
-    if (!wrist || wrist.confidence < 0.5) {
-      tempoDisplay.textContent = "...";
+
+    // 2) Adaptacyjne progi (jeśli dodałeś dynamicThresholds)
+    const DT = dynamicThresholds ? dynamicThresholds(dict) : null;
+    const MIN_MOVE = DT ? DT.MIN_MOVE : MIN_MOVEMENT_THRESHOLD;
+    const JITTER = DT ? DT.JITTER : JITTER_MOVEMENT_THRESHOLD;
+    const minConf = DT ? DT.minConfForArm : 0.5;
+
+    // 3) Dane ręki
+    const wristName = measuredHand + "Wrist";
+    const wrist = getPart(dict, wristName, minConf);
+    if (!wrist) {
+      if (tempoDisplay) tempoDisplay.textContent = "...";
       return;
     }
 
+    // 4) Historia Y
     const y = wrist.y;
     wristYHistory.push(y);
     if (wristYHistory.length > WRIST_HISTORY_LENGTH) wristYHistory.shift();
 
+    // 5) Filtr „jitteru”
     if (wristYHistory.length >= WRIST_HISTORY_LENGTH) {
       const minY = Math.min(...wristYHistory);
       const maxY = Math.max(...wristYHistory);
-      if (maxY - minY < JITTER_MOVEMENT_THRESHOLD) {
-        tempoDisplay.textContent = "0.0";
+      if (maxY - minY < JITTER) {
+        if (tempoDisplay) tempoDisplay.textContent = "0.0";
         lastBeatTime = now;
         beatTimestamps = [];
         return;
       }
     }
 
+    // 6) Detekcja beatu i BPM
     if (wristYHistory.length > 10) {
       const fiveAgo = wristYHistory[wristYHistory.length - 5];
       const vel = y - fiveAgo;
-      if (vel > MIN_MOVEMENT_THRESHOLD) {
+      if (vel > MIN_MOVE) {
         const tenAgo =
           wristYHistory[wristYHistory.length - 10] || wristYHistory[0];
         if (y > tenAgo) {
@@ -370,7 +469,14 @@ const sketch = (p) => {
             const n = beatTimestamps.length - 1;
             const avg = total / n;
             const bpm = 60000 / avg;
-            tempoDisplay.textContent = p.nf(p.constrain(bpm, 0, 1500), 0, 1);
+
+            if (tempoDisplay)
+              tempoDisplay.textContent = p.nf(p.constrain(bpm, 0, 2000), 0, 1);
+
+            const hz = bpm / 60;
+            if (isFinite(hz) && hz >= 0.3 && hz <= 6.5) {
+              window.parent?.postMessage({ type: "ml:tempo", hz }, "*");
+            }
           }
           p.blinkKeypoint(wristName);
         }
@@ -473,51 +579,55 @@ const sketch = (p) => {
     lastBlinkPart = part;
   };
 
-  p.drawKeypoints = (pose) => {
+  p.drawKeypoints = (dict) => {
     const tracked = [
       "nose",
       "leftEye",
       "rightEye",
       "leftEar",
       "rightEar",
-      "leftShoulder",
-      "rightShoulder",
-      "leftElbow",
-      "rightElbow",
-      "leftWrist",
-      "rightWrist",
+      measuredHand + "Shoulder",
+      measuredHand + "Elbow",
+      measuredHand + "Wrist",
     ];
-    p.strokeWeight(0);
-    for (let i = 0; i < pose.keypoints.length; i++) {
-      const k = pose.keypoints[i];
-      const part = k.part;
-      if (k.score > 0.3 && tracked.includes(part)) {
-        p.fill(49, 75, 237);
-        let size = 12;
-        const measuredPart = measuredHand + "Wrist";
-        if (
-          part === measuredPart &&
-          part === lastBlinkPart &&
-          blinkFrames > 0
-        ) {
-          p.fill(239, 68, 68);
-          size = 25;
-          blinkFrames--;
-        } else if (blinkFrames <= 0) {
-          lastBlinkPart = null;
-        }
-        p.ellipse(k.position.x, k.position.y, size, size);
 
-        if (part === measuredPart) {
-          p.fill(255);
-          p.textSize(10);
-          p.textAlign(p.CENTER, p.CENTER);
-          p.text("BPM", k.position.x, k.position.y + 2);
-        }
+    p.strokeWeight(0);
+    for (const part of tracked) {
+      const k = getPart(dict, part, 0.3);
+      if (!k) continue;
+
+      p.fill(49, 75, 237);
+      let size = 12;
+
+      const measuredPart = measuredHand + "Wrist";
+      if (part === measuredPart && part === lastBlinkPart && blinkFrames > 0) {
+        p.fill(239, 68, 68);
+        size = 25;
+        blinkFrames--;
+      } else if (blinkFrames <= 0) {
+        lastBlinkPart = null;
+      }
+
+      p.ellipse(k.x, k.y, size, size);
+
+      if (part === measuredPart) {
+        p.fill(255);
+        p.textSize(10);
+        p.textAlign(p.CENTER, p.CENTER);
+        p.text("BPM", k.x, k.y + 2);
       }
     }
   };
-
+  p.drawSelectedArmSkeleton = (dict, hand) => {
+    p.stroke(255);
+    p.strokeWeight(3);
+    const links = ARM_LINKS[hand];
+    for (const [a, b] of links) {
+      const ka = getPart(dict, a, 0.3);
+      const kb = getPart(dict, b, 0.3);
+      if (ka && kb) p.line(ka.x, ka.y, kb.x, kb.y);
+    }
+  };
   p.drawSkeleton = (skeleton) => {
     p.stroke(255);
     p.strokeWeight(3);

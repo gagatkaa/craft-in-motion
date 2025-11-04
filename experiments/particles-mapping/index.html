@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>ML signal → pulse circle</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: #0f1116;
+        }
+
+        #c {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #hud {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            padding: 6px 10px;
+            font: 12px/1.2 system-ui, sans-serif;
+            color: #cbd5e1;
+            background: #0b0f14aa;
+            border-radius: 8px;
+        }
+
+        #hud b {
+            color: #e2e8f0;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="c"></canvas>
+    <div id="hud">tempo: <b id="tempoVal">—</b> Hz</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script>
+        // ważne: usuwa dodatkowe wygładzanie i opóźnianie klatek
+        gsap.ticker.lagSmoothing(0);
+    </script>
+    <script src="script.js"></script>
+</body>
+
+</html>
