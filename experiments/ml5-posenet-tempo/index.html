@@ -9,28 +9,10 @@
         rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
 
-    <!-- libs -->
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
     <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
-    <style>
-        .warning-banner {
-            display: none;
-            margin: 8px 0;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-weight: 600;
-        }
 
-        #low-light-warning {
-            background: #fff3cd;
-            color: #7a5a00;
-        }
-
-        #safety-warning {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-    </style>
 </head>
 
 <body>
@@ -38,7 +20,6 @@
         <h1>PoseNet Live Tempo Tracker</h1>
         <p><b>ML Experiment 1:</b> Tempo z nadgarstka + kontrola kąta łokcia trzymanej ręki.</p>
 
-        <!-- Camera Selection -->
         <div id="camera-selection-panel">
             <div class="status-item">
                 <span class="status-label">Select Camera:</span>
@@ -46,7 +27,7 @@
             </div>
         </div>
 
-        <!-- Hand Selection -->
+
         <div id="hand-selection-panel" class="panel">
             <div class="status-item">
                 <span class="status-label">Measured Hand:</span>
@@ -55,7 +36,7 @@
             </div>
         </div>
 
-        <!-- Status Panel -->
+
         <div class="panel">
             <div class="status-item">
                 <span class="status-label">Model Status:</span>
@@ -67,518 +48,43 @@
             </div>
         </div>
 
-        <!-- Elbow Panel -->
+
         <div class="panel">
             <div class="status-item">
                 <span class="status-label">Elbow Angle (°):</span>
-                <span id="elbow-angle">—</span>
+                <span id="elbow-angle">-</span>
             </div>
             <div class="status-item" style="text-align:right;">
                 <span class="status-label">Form:</span>
-                <span id="form-status">—</span>
+                <span id="form-status">-</span>
             </div>
         </div>
 
-        <!-- Warnings -->
+
         <div id="low-light-warning" class="warning-banner">
             ⚠️ Low Light Detected. Please increase illumination for better tracking.
         </div>
         <div id="safety-warning" class="warning-banner">
-            🛑 Nie zasłaniaj twarzy shakerem ani rękami. Odsuń sprzęt od linii wzroku.
+            🛑 Do not cover your face with the shaker or your hands. Move the equipment away from your line of sight.
         </div>
 
-        <!-- Canvas -->
+
         <div id="p5-canvas-container" style="display:flex;justify-content:center;"></div>
 
-        <!-- Info -->
+
         <div class="info-panel">
             <h3>Logic:</h3>
             <ul>
-                <li>Tempo z wybranego nadgarstka (downbeat z ruchu w dół + filtr jitteru).</li>
-                <li>Kąt łokcia = kąt między wektorami <i>shoulder→elbow</i> i <i>wrist→elbow</i>.</li>
-                <li>Form OK, gdy kąt w domyślnym zakresie 75°–115° (możesz zmienić w stałych).</li>
-                <li>Przy łokciu rysujemy łuk: zielony (OK) / czerwony (Adjust).</li>
-                <li>Bezpieczeństwo: ostrzeżenie gdy dłonie lub shaker przecinają obszar twarzy.</li>
+                <li>Tempo is measured from the selected wrist (downbeat detected from downward motion + jitter filter).
+                </li>
+                <li>Elbow angle = the angle between the vectors <i>shoulder→elbow</i> and <i>wrist→elbow</i>.</li>
+                <li>Form is OK when the angle stays within the default range of 10°-75°.</li>
+                <li>An arc is drawn at the elbow: green (OK) / red (Adjust).</li>
+                <li>Safety: warning appears when hands or the shaker intersect the face area.</li>
             </ul>
         </div>
     </div>
-
-    <script>
-        // --- Global / UI ---
-        let video, poseNet, poses = [], canvas, cameraSelect;
-        let measuredHand = 'right'; // 'right' | 'left'
-
-        // --- Tempo ---
-        const WRIST_HISTORY_LENGTH = 30;
-        const MIN_MOVEMENT_THRESHOLD = 5;
-        const JITTER_MOVEMENT_THRESHOLD = 12;
-        const BEAT_INTERVAL_HISTORY = 10;
-        const STATIC_RESET_THRESHOLD_MS = 3000;
-
-        let wristYHistory = [];
-        let lastBeatTime = 0;
-        let beatTimestamps = [];
-        let lastFrameTime = 0;
-
-        // --- Elbow Angle ---
-        const ELBOW_OK_MIN = 10;
-        const ELBOW_OK_MAX = 75;
-        const ANGLE_SMOOTHING = 5;
-        let elbowAngleHistory = [];
-
-        // --- Video/Light ---
-        const VIDEO_WIDTH = 640;
-        const VIDEO_HEIGHT = 480;
-        let lastLuminance = 0;
-        const LOW_LIGHT_THRESHOLD = 50;
-
-        // --- Blink state ---
-        let blinkFrames = 0;
-        let lastBlinkPart = null;
-
-        function wireHandSelection() {
-            document.querySelectorAll('input[name="hand"]').forEach(r => {
-                r.addEventListener('change', e => {
-                    measuredHand = e.target.value;
-                    wristYHistory = [];
-                    beatTimestamps = [];
-                    lastBeatTime = 0;
-                    elbowAngleHistory = [];
-                    document.getElementById('tempo-display').textContent = '0.0';
-                    document.getElementById('elbow-angle').textContent = '—';
-                    document.getElementById('form-status').textContent = '—';
-                });
-            });
-        }
-
-        // Cel: wykryć zasłanianie twarzy dłonią/shakerem trzymanym JEDNĄ lub obiema rękami.
-        // Działa w 2D: krąg twarzy (z oczu), test punktów (wrist/elbow/projekcja "tip")
-        // + test przecięcia odcinka elbow–wrist z kręgiem.
-        function checkHandsShakerInFrontOfFace(pose, opts = {}) {
-            if (!pose) return { isUnsafe: false, reason: "no-pose" };
-
-            const minConf = opts.minConf ?? 0.3;     // trochę niżej, bo oczy/nadgarstek bywa szumiący
-            const faceRadK = opts.faceRadK ?? 1.2;    // promień twarzy = faceRadK * odległość-oczu
-            const tipK = opts.tipK ?? 0.65;       // jak daleko "czubek ręki" wychodzi poza nadgarstek (wiel. przedramienia)
-            const useElbowIntersect = opts.useElbowIntersect ?? true;
-
-            // --- punkty twarzy
-            const L = pose.leftEye, R = pose.rightEye, N = pose.nose;
-            const conf = (k) => k && (k.confidence ?? k.score ?? 0) >= minConf;
-
-            // potrzebujemy przynajmniej oczu; nos poprawia środek
-            if (!conf(L) || !conf(R)) return { isUnsafe: false, reason: "no-face" };
-
-            const eyeDist = Math.hypot(L.x - R.x, L.y - R.y);
-            if (eyeDist < 2) return { isUnsafe: false, reason: "degenerate-face" };
-
-            // środek kręgu: między oczami lekko przesunięty w stronę nosa, jeśli jest
-            const cx = (L.x + R.x) / 2 * (N && conf(N) ? 0.5 : 1) + (N && conf(N) ? N.x * 0.5 : 0);
-            const cy = (L.y + R.y) / 2 * (N && conf(N) ? 0.5 : 1) + (N && conf(N) ? N.y * 0.5 : 0);
-            const faceR = faceRadK * eyeDist;
-
-            // --- pomocnicze
-            const dist2 = (a, b) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
-            const inFaceCircle = (p) => p && dist2(p, { x: cx, y: cy }) <= faceR * faceR;
-
-            // test przecięcia odcinka z okręgiem
-            const segCircleIntersect = (A, B, Cx, Cy, R) => {
-                // rzut punktu C na AB i clamp do [0,1]
-                const ABx = B.x - A.x, ABy = B.y - A.y;
-                const ACx = Cx - A.x, ACy = Cy - A.y;
-                const ab2 = ABx * ABx + ABy * ABy || 1e-6;
-                let t = (ACx * ABx + ACy * ABy) / ab2;
-                t = Math.max(0, Math.min(1, t));
-                const Px = A.x + t * ABx, Py = A.y + t * ABy;
-                const d2 = (Px - Cx) * (Px - Cx) + (Py - Cy) * (Py - Cy);
-                return d2 <= R * R;
-            };
-
-            // --- punkty kończyn
-            const rw = pose.rightWrist, lw = pose.leftWrist;
-            const re = pose.rightElbow, le = pose.leftElbow;
-
-            const offenders = [];
-
-            // 1) nadgarstki w kręgu twarzy
-            if (conf(rw) && inFaceCircle(rw)) offenders.push("rightWrist");
-            if (conf(lw) && inFaceCircle(lw)) offenders.push("leftWrist");
-
-            // 2) czubek ręki (projekcja o długości ~tipK * |wrist-elbow| w kierunku od łokcia przez nadgarstek)
-            const addTip = (wr, el, tag) => {
-                if (!conf(wr) || !conf(el)) return;
-                const vx = wr.x - el.x, vy = wr.y - el.y;
-                const len = Math.hypot(vx, vy) || 1e-6;
-                const tip = { x: wr.x + (vx / len) * (tipK * len), y: wr.y + (vy / len) * (tipK * len) };
-                if (inFaceCircle(tip)) offenders.push(tag);
-                return tip; // do debug-rysowania
-            };
-            const tipR = addTip(rw, re, "rightHandTip");
-            const tipL = addTip(lw, le, "leftHandTip");
-
-            // 3) odcinek łokieć–nadgarstek przecina krąg twarzy
-            if (useElbowIntersect) {
-                if (conf(rw) && conf(re) && segCircleIntersect(re, rw, cx, cy, faceR)) offenders.push("rightForearm");
-                if (conf(lw) && conf(le) && segCircleIntersect(le, lw, cx, cy, faceR)) offenders.push("leftForearm");
-            }
-
-            // 4) linia "shakera" (między nadgarstkami) przecina krąg
-            if (conf(rw) && conf(lw) && segCircleIntersect(lw, rw, cx, cy, faceR)) {
-                offenders.push("shakerLine");
-            }
-
-            const isUnsafe = offenders.length > 0;
-            const reason = isUnsafe ? "Ręce/butelka zasłaniają obszar twarzy" : "ok";
-
-            return { isUnsafe, reason, faceCircle: { cx, cy, r: faceR }, offenders, tips: { tipR, tipL } };
-        }
-
-
-        // --- p5 sketch ---
-        const sketch = (p) => {
-            p.setup = () => {
-                canvas = p.createCanvas(VIDEO_WIDTH, VIDEO_HEIGHT);
-                canvas.parent('p5-canvas-container');
-                canvas.elt.id = 'p5-canvas';
-
-                cameraSelect = document.getElementById('camera-select');
-                wireHandSelection();
-                p.getMediaDevices();
-
-                lastFrameTime = p.millis();
-            };
-
-            p.getMediaDevices = () => {
-                if (!navigator.mediaDevices?.enumerateDevices) {
-                    document.getElementById('status-text').textContent = 'Camera selection unavailable.';
-                    return;
-                }
-                navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-                    .then(stream => {
-                        stream.getTracks().forEach(t => t.stop());
-                        return navigator.mediaDevices.enumerateDevices();
-                    })
-                    .then(devices => {
-                        const videoDevices = devices.filter(d => d.kind === 'videoinput');
-                        if (!videoDevices.length) {
-                            document.getElementById('status-text').textContent = 'No camera found.';
-                            return;
-                        }
-                        cameraSelect.innerHTML = '';
-                        videoDevices.forEach((device, idx) => {
-                            const opt = document.createElement('option');
-                            opt.value = device.deviceId;
-                            opt.text = device.label || `Camera ${idx + 1}`;
-                            cameraSelect.appendChild(opt);
-                        });
-                        p.startVideo(videoDevices[0].deviceId);
-                        cameraSelect.onchange = (e) => p.startVideo(e.target.value);
-                    })
-                    .catch(err => {
-                        console.error('Camera access error:', err);
-                        document.getElementById('status-text').textContent = 'Camera Blocked/Error: ' + err.name;
-                    });
-            };
-
-            p.startVideo = (deviceId) => {
-                if (video?.elt?.srcObject) {
-                    video.elt.srcObject.getTracks().forEach(t => t.stop());
-                    video.remove();
-                }
-                const constraints = { video: { deviceId: { exact: deviceId }, width: VIDEO_WIDTH, height: VIDEO_HEIGHT }, audio: false };
-                video = p.createCapture(constraints, p.videoLoaded);
-                video.size(VIDEO_WIDTH, VIDEO_HEIGHT);
-                video.hide();
-                const st = document.getElementById('status-text');
-                st.textContent = 'Loading Model...';
-                st.style.color = '#d97706';
-            };
-
-            p.videoLoaded = () => {
-                if (poseNet) {
-                    poseNet.video = video.elt;
-                    poseNet.removeAllListeners('pose');
-                }
-                poseNet = ml5.poseNet(video, { flipHorizontal: true, detectionType: 'single' }, p.modelReady);
-                poseNet.on('pose', p.gotPoses);
-            };
-
-            p.modelReady = () => {
-                const st = document.getElementById('status-text');
-                st.textContent = 'Ready!';
-                st.style.color = '#10b981';
-            };
-
-            p.gotPoses = (results) => { poses = results; };
-
-            p.draw = () => {
-                const now = p.millis();
-                const dt = now - lastFrameTime;
-                lastFrameTime = now;
-
-                if (video && video.elt.readyState === 4) {
-                    p.push();
-                    p.translate(VIDEO_WIDTH, 0); p.scale(-1, 1);
-                    p.image(video, 0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
-                    p.pop();
-
-                    p.analyzeLuminance();
-                    p.drawPoseData(dt);
-                } else {
-                    p.background(50);
-                    p.fill(255); p.textSize(24); p.textAlign(p.CENTER, p.CENTER);
-                    p.text("Awaiting Camera/Model...", VIDEO_WIDTH / 2, VIDEO_HEIGHT / 2);
-                }
-            };
-
-            p.analyzeLuminance = () => {
-                let sum = 0, step = 20, count = (VIDEO_WIDTH / step) * (VIDEO_HEIGHT / step);
-                if (video.elt.readyState === 4) {
-                    video.loadPixels();
-                    for (let x = 0; x < VIDEO_WIDTH; x += step) {
-                        for (let y = 0; y < VIDEO_HEIGHT; y += step) {
-                            const idx = (x + y * VIDEO_WIDTH) * 4;
-                            const r = video.pixels[idx], g = video.pixels[idx + 1], b = video.pixels[idx + 2];
-                            sum += 0.299 * r + 0.587 * g + 0.114 * b;
-                        }
-                    }
-                    lastLuminance = sum / count;
-                } else lastLuminance = 255;
-                document.getElementById('low-light-warning').style.display =
-                    lastLuminance < LOW_LIGHT_THRESHOLD ? 'block' : 'none';
-            };
-
-            p.drawPoseData = () => {
-                const now = p.millis();
-                const safetyBanner = document.getElementById('safety-warning');
-                let unsafe = null;
-
-                if (poses.length > 0) {
-                    const pose = poses[0].pose;
-                    p.drawKeypoints(pose);
-                    p.drawSkeleton(poses[0].skeleton);
-
-                    // Tempo
-                    p.calculateTempo(pose, now);
-
-                    // Elbow angle + overlay
-                    p.calculateElbowAngle(pose);
-
-                    // Safety check – wykrywanie dłoni/shakera przed twarzą
-                    const res = checkHandsShakerInFrontOfFace(pose, {
-                        minConf: 0.35,
-                        faceRadK: 1.5,     // powiększ do 1.1–1.2, jeśli nie łapie
-                        tipK: 0.8,          // zwiększ do 1.0 dla dłuższej butelki
-                        useElbowIntersect: true
-                    });
-                    unsafe = res;
-
-                    // Pokaż baner, jeśli zasłaniasz twarz
-                    safetyBanner.style.display = res.isUnsafe ? 'block' : 'none';
-
-                    // --- DEBUG: podgląd kręgu twarzy + czubków dłoni ---
-                    if (res.faceCircle) {
-                        p.push();
-                        p.noFill();
-                        p.stroke(res.isUnsafe ? '#ef4444' : '#22c55e');
-                        p.strokeWeight(2);
-                        p.circle(res.faceCircle.cx, res.faceCircle.cy, res.faceCircle.r * 2);
-                        p.pop();
-                    }
-                    if (res.tips?.tipR) {
-                        p.push(); p.noStroke(); p.fill('#f59e0b');
-                        p.circle(res.tips.tipR.x, res.tips.tipR.y, 8); p.pop();
-                    }
-                    if (res.tips?.tipL) {
-                        p.push(); p.noStroke(); p.fill('#f59e0b');
-                        p.circle(res.tips.tipL.x, res.tips.tipL.y, 8); p.pop();
-                    }
-
-                } else {
-                    document.getElementById('tempo-display').textContent = '0.0';
-                    document.getElementById('elbow-angle').textContent = '—';
-                    document.getElementById('form-status').textContent = '—';
-                    safetyBanner.style.display = 'none';
-                    lastBeatTime = now;
-                    beatTimestamps = [];
-                    elbowAngleHistory = [];
-                }
-
-                if (now - lastBeatTime > STATIC_RESET_THRESHOLD_MS) {
-                    document.getElementById('tempo-display').textContent = '0.0';
-                    beatTimestamps = [];
-                }
-
-                // HUD (light/fps)
-                p.fill(255, 255, 255, 180); p.noStroke();
-                p.rect(0, VIDEO_WIDTH - 30, 260, 30, 0, 8, 0, 0);
-                p.fill(0); p.textSize(12); p.textAlign(p.LEFT, p.CENTER);
-                p.text(`Light: ${p.nf(lastLuminance, 0, 1)} | FPS: ${p.nf(p.frameRate(), 0, 1)}`, 10, VIDEO_HEIGHT - 15);
-            };
-
-            // --- Tempo from selected wrist ---
-            p.calculateTempo = (pose, now) => {
-                const wristName = measuredHand + 'Wrist';
-                const wrist = pose[wristName];
-                const tempoDisplay = document.getElementById('tempo-display');
-                if (!wrist || wrist.confidence < 0.5) { tempoDisplay.textContent = '...'; return; }
-
-                const y = wrist.y;
-                wristYHistory.push(y);
-                if (wristYHistory.length > WRIST_HISTORY_LENGTH) wristYHistory.shift();
-
-                if (wristYHistory.length >= WRIST_HISTORY_LENGTH) {
-                    const minY = Math.min(...wristYHistory);
-                    const maxY = Math.max(...wristYHistory);
-                    if (maxY - minY < JITTER_MOVEMENT_THRESHOLD) {
-                        tempoDisplay.textContent = '0.0';
-                        lastBeatTime = now;
-                        beatTimestamps = [];
-                        return;
-                    }
-                }
-
-                if (wristYHistory.length > 10) {
-                    const fiveAgo = wristYHistory[wristYHistory.length - 5];
-                    const vel = y - fiveAgo;
-                    if (vel > MIN_MOVEMENT_THRESHOLD) {
-                        const tenAgo = wristYHistory[wristYHistory.length - 10] || wristYHistory[0];
-                        if (y > tenAgo) {
-                            lastBeatTime = now;
-                            beatTimestamps.push(now);
-                            if (beatTimestamps.length > BEAT_INTERVAL_HISTORY) beatTimestamps.shift();
-
-                            if (beatTimestamps.length >= 2) {
-                                const total = now - beatTimestamps[0];
-                                const n = beatTimestamps.length - 1;
-                                const avg = total / n;
-                                const bpm = 60000 / avg;
-                                tempoDisplay.textContent = p.nf(p.constrain(bpm, 0, 1500), 0, 1);
-                            }
-                            p.blinkKeypoint(wristName);
-                        }
-                    }
-                }
-            };
-
-            // --- Elbow angle for measured hand ---
-            p.calculateElbowAngle = (pose) => {
-                const shoulder = pose[measuredHand + 'Shoulder'];
-                const elbow = pose[measuredHand + 'Elbow'];
-                const wrist = pose[measuredHand + 'Wrist'];
-
-                const angleEl = document.getElementById('elbow-angle');
-                const formEl = document.getElementById('form-status');
-
-                if (!shoulder || !elbow || !wrist ||
-                    shoulder.confidence < 0.4 || elbow.confidence < 0.4 || wrist.confidence < 0.4) {
-                    angleEl.textContent = '—';
-                    formEl.textContent = '—';
-                    return;
-                }
-
-                // wektory do łokcia
-                let v1x = shoulder.x - elbow.x, v1y = shoulder.y - elbow.y;  // ramię
-                let v2x = wrist.x - elbow.x, v2y = wrist.y - elbow.y;        // przedramię
-
-                // normalizacja
-                const m1 = Math.hypot(v1x, v1y), m2 = Math.hypot(v2x, v2y);
-                if (m1 === 0 || m2 === 0) { angleEl.textContent = '—'; formEl.textContent = '—'; return; }
-                v1x /= m1; v1y /= m1; v2x /= m2; v2y /= m2;
-
-                // kąt między wektorami (0..180)
-                let dot = v1x * v2x + v1y * v2y;
-                dot = Math.max(-1, Math.min(1, dot));
-                let angleDeg = Math.acos(dot) * (180 / Math.PI);
-
-                // wygładzanie
-                elbowAngleHistory.push(angleDeg);
-                if (elbowAngleHistory.length > ANGLE_SMOOTHING) elbowAngleHistory.shift();
-                const avgAngle = elbowAngleHistory.reduce((a, b) => a + b, 0) / elbowAngleHistory.length;
-
-                angleEl.textContent = Math.round(avgAngle);
-                const ok = avgAngle >= ELBOW_OK_MIN && avgAngle <= ELBOW_OK_MAX;
-                formEl.textContent = ok ? 'OK' : 'Adjust';
-
-                // rysowanie łuku
-                p.drawElbowArc(elbow.x, elbow.y, v1x, v1y, v2x, v2y, ok);
-            };
-
-            p.drawElbowArc = (ex, ey, u_x, u_y, w_x, w_y, ok) => {
-                const a1 = Math.atan2(u_y, u_x);
-                const a2 = Math.atan2(w_y, w_x);
-
-                let diff = a2 - a1;
-                while (diff <= -Math.PI) diff += 2 * Math.PI;
-                while (diff > Math.PI) diff -= 2 * Math.PI;
-
-                const sweep = Math.abs(diff);
-
-                let bx = u_x + w_x, by = u_y + w_y;
-                let bm = Math.hypot(bx, by);
-                if (bm < 1e-6) {
-                    const cross = u_x * w_y - u_y * w_x;
-                    bx = -u_y * Math.sign(cross || 1);
-                    by = u_x * Math.sign(cross || 1);
-                    bm = Math.hypot(bx, by);
-                }
-                bx /= bm; by /= bm;
-
-                const mid = Math.atan2(by, bx);
-                const start = mid - sweep / 2;
-                const end = mid + sweep / 2;
-
-                const r = 40;
-                p.push();
-                p.noFill();
-                p.stroke(ok ? '#10b981' : '#ef4444');
-                p.strokeWeight(5);
-                p.arc(ex, ey, r * 2, r * 2, start, end);
-                p.pop();
-            };
-
-            p.blinkKeypoint = (part) => { blinkFrames = 10; lastBlinkPart = part; };
-
-            p.drawKeypoints = (pose) => {
-                const tracked = ['nose', 'leftEye', 'rightEye', 'leftEar', 'rightEar', 'leftShoulder', 'rightShoulder', 'leftElbow', 'rightElbow', 'leftWrist', 'rightWrist'];
-                p.strokeWeight(0);
-                for (let i = 0; i < pose.keypoints.length; i++) {
-                    const k = pose.keypoints[i];
-                    const part = k.part;
-                    if (k.score > 0.3 && tracked.includes(part)) {
-                        p.fill(49, 75, 237);
-                        let size = 12;
-                        const measuredPart = measuredHand + 'Wrist';
-                        if (part === measuredPart && part === lastBlinkPart && blinkFrames > 0) {
-                            p.fill(239, 68, 68);
-                            size = 25;
-                            blinkFrames--;
-                        } else if (blinkFrames <= 0) {
-                            lastBlinkPart = null;
-                        }
-                        p.ellipse(k.position.x, k.position.y, size, size);
-
-                        if (part === measuredPart) {
-                            p.fill(255); p.textSize(10); p.textAlign(p.CENTER, p.CENTER);
-                            p.text('BPM', k.position.x, k.position.y + 2);
-                        }
-                    }
-                }
-            };
-
-            p.drawSkeleton = (skeleton) => {
-                p.stroke(255); p.strokeWeight(3);
-                for (let i = 0; i < skeleton.length; i++) {
-                    const a = skeleton[i][0], b = skeleton[i][1];
-                    if (a.score > 0.3 && b.score > 0.3) {
-                        p.line(a.position.x, a.position.y, b.position.x, b.position.y);
-                    }
-                }
-            };
-        };
-
-        window.onload = () => { new p5(sketch); };
-    </script>
+    <script src="script.js"></script>
 </body>
 
 </html>

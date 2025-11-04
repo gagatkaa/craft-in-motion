@@ -141,3 +141,20 @@ p {
   color: #3730a3;
   font-weight: 600;
 }
+.warning-banner {
+  display: none;
+  margin: 8px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+#low-light-warning {
+  background: #fff3cd;
+  color: #7a5a00;
+}
+
+#safety-warning {
+  background: #fee2e2;
+  color: #991b1b;
+}
