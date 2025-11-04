@@ -3,80 +3,14 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>Smile Detector — Production Mode</title>
+    <title>Smile Detector</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-        :root {
-            color-scheme: dark;
-        }
-
-        body {
-            margin: 0;
-            font-family: system-ui, sans-serif;
-            background: #0e1116;
-            color: #e9eef3;
-        }
-
-        main {
-            max-width: 720px;
-            margin: 24px auto;
-            padding: 16px;
-        }
-
-        .cam {
-            position: relative;
-            width: 560px;
-            height: 420px;
-            margin: auto;
-            border-radius: 14px;
-            overflow: hidden;
-            background: #10141f;
-            border: 1px solid #222b3f;
-        }
-
-        video,
-        canvas {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .badge {
-            position: absolute;
-            left: 12px;
-            bottom: 12px;
-            padding: 10px 14px;
-            border-radius: 10px;
-            font-weight: 800;
-            background: #151c2a;
-            border: 1px solid #28324a;
-        }
-
-        .good {
-            color: #36d48b;
-        }
-
-        .bad {
-            color: #ff6b74;
-        }
-
-        .mid {
-            color: #f0d46b;
-        }
-
-        .muted {
-            opacity: .85;
-            text-align: center;
-        }
-    </style>
+    <link rel="stylesheet" href="style-prod.css" />
 </head>
 
 <body>
     <main>
-        <h1 style="text-align:center">Smile Detector — Production</h1>
-        <p class="muted">Model loaded from the <code>/models</code> folder.</p>
+        <h1 style="text-align:center">Smile Detector</h1>
 
         <div class="cam">
             <video id="video" autoplay playsinline muted></video>
@@ -101,12 +35,12 @@
             let predictions = [];
             let nn;
 
-            // --- Calibration gathered by FRAME COUNT, not time ---
+
             let baselineEAR = null;
             let calibSum = 0, calibN = 0;
             let calibrated = false;
-            const CALIB_REQUIRED_FRAMES = 20; // how many frames with face we need to gather for neutral
-            let modelReady = false; // only classify after model is loaded
+            const CALIB_REQUIRED_FRAMES = 20;
+            let modelReady = false;
 
             const IDX = {
                 mouthL: 61, mouthR: 291, mouthUp: 13, mouthDn: 14,
@@ -137,7 +71,7 @@
                     weights: 'models/model.weights.bin'
                 }, () => {
                     modelReady = true;
-                    // Reset calibration and message
+
                     baselineEAR = null;
                     calibSum = 0; calibN = 0; calibrated = false;
                     liveLabel.className = 'badge mid';
@@ -164,12 +98,12 @@
                 const S = smileWidthRatio(kp);
                 const EAR = (eyeAspectRatioL(kp) + eyeAspectRatioR(kp)) / 2;
 
-                // helper drawing (can be disabled for performance)
+
                 strokePath([IDX.mouthL, IDX.mouthUp, IDX.mouthR, IDX.mouthDn], kp);
                 strokePath([IDX.eyeL_h1, IDX.eyeL_v1, IDX.eyeL_h2, IDX.eyeL_v2], kp);
                 strokePath([IDX.eyeR_h1, IDX.eyeR_v1, IDX.eyeR_h2, IDX.eyeR_v2], kp);
 
-                // --- Calibration by frame count with face ---
+
                 if (modelReady && !calibrated) {
                     calibSum += EAR; calibN++;
                     liveLabel.className = 'badge mid';
@@ -181,7 +115,7 @@
                         liveLabel.className = 'badge mid';
                         liveLabel.textContent = 'Ready. Look at the camera and smile.';
                     }
-                    return; // don’t classify until calibration done
+                    return;
                 }
 
                 if (!modelReady || !calibrated) return;

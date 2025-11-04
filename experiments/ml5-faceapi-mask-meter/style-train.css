@@ -1,0 +1,133 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #0e1116;
+  color: #e9eef3;
+  font-size: 1rem;
+}
+
+main {
+  max-width: 60rem;
+  margin: 1.5rem auto;
+  padding: 1rem;
+}
+
+h1 {
+  font-size: 1.2rem;
+  margin: 0 0 0.75rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 35rem 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.cam {
+  position: relative;
+  width: 35rem;
+  height: 26rem;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #10141f;
+  border: 1px solid #222b3f;
+}
+
+video,
+canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.badge {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.625rem;
+  font-weight: 800;
+  background: #151c2a;
+  border: 1px solid #28324a;
+}
+
+.good {
+  color: #36d48b;
+}
+
+.bad {
+  color: #ff6b74;
+}
+
+.mid {
+  color: #f0d46b;
+}
+
+.panel {
+  background: #151b26;
+  border: 1px solid #263047;
+  border-radius: 14px;
+  padding: 0.875rem 1rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+#train button {
+  background-color: rgb(98, 143, 13);
+}
+
+button {
+  padding: 0.625rem 0.875rem;
+  border-radius: 10px;
+  border: 1px solid #2a3142;
+  background: #1a2030;
+  color: #e9eef2;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #22283a;
+}
+
+.muted {
+  opacity: 0.85;
+}
+
+.counts {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.pill {
+  background: #0b4374;
+  border: 1px solid #24314b;
+  padding: 0.375rem 0.625rem;
+  border-radius: 100rem;
+  text-align: center;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+label.file {
+  padding: 0.625rem 0.875rem;
+  border-radius: 10px;
+  border: 1px solid #2a3142;
+  background: #1a2030;
+  color: #e9eef2;
+  cursor: pointer;
+}
+
+label.file:hover {
+  background: #22283a;
+}
