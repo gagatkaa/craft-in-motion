@@ -3,7 +3,7 @@
   --text: #f4f4f4;
   --muted: #b7b7c1;
   --card: #141419cc;
-  /* translucent so blobs glow through */
+
   --border: rgba(255, 255, 255, 0.08);
   --accent: #ff7a1a;
 }
@@ -14,7 +14,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: "Red Hat Display", system-ui, sans-serif;
-  /* this helps anchor jumps, not wheel scrolling, but harmless */
+
   scroll-behavior: smooth;
 }
 
@@ -22,7 +22,6 @@ body {
   box-sizing: border-box;
 }
 
-/* Eternal background blobs */
 .bg {
   position: fixed;
   inset: 0;
@@ -41,16 +40,13 @@ body {
   opacity: 0.4;
   mix-blend-mode: lighten;
   transform: translateZ(0);
-  /* GPU promote */
 }
 
-/* Content above the background */
 .content {
   position: relative;
   z-index: 1;
 }
 
-/* Intro hero text */
 .hero {
   min-height: 100vh;
   display: grid;
@@ -71,7 +67,6 @@ body {
   transform: translateY(40px);
 }
 
-/* Story sections */
 .spacer {
   height: 8vh;
 }

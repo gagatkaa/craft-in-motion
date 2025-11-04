@@ -40,7 +40,7 @@ body {
   color: #bdbdc7;
 }
 
-/* Pinned CTA section */
+
 .stage {
   position: relative;
   min-height: 120vh;
@@ -117,7 +117,7 @@ body {
   transform: translateY(6px);
 }
 
-/* Tickets under the CTA - detailed build */
+
 .tickets-wrap {
   margin-top: 1.25rem;
   display: grid;
@@ -153,7 +153,7 @@ body {
   will-change: transform, opacity;
 }
 
-/* left color strip + dot */
+
 .ticket__strip {
   grid-row: 1 / span 4;
   width: 10px;
@@ -182,7 +182,7 @@ body {
   color: var(--muted);
 }
 
-/* item list */
+
 .ticket__items {
   margin-top: 6px;
   border: 1px dashed var(--line);
@@ -213,7 +213,6 @@ body {
   margin-left: auto;
 }
 
-/* comment */
 .ticket__comment {
   margin-top: 8px;
   font-size: 13px;
@@ -224,7 +223,7 @@ body {
   padding: 8px 10px;
 }
 
-/* meta */
+
 .ticket__meta {
   margin-top: 8px;
   display: flex;
@@ -259,7 +258,6 @@ body {
   color: var(--ok);
 }
 
-/* responsive */
 @media (max-width: 900px) {
   .tickets-grid {
     grid-template-columns: repeat(2, minmax(240px, 1fr));
@@ -272,7 +270,6 @@ body {
   }
 }
 
-/* reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .ticket {
     transform: none;

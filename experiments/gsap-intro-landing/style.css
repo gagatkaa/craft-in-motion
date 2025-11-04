@@ -18,7 +18,6 @@ body {
   overflow: hidden;
 }
 
-/* ---- BLOBS ---- */
 .blobs {
   position: absolute;
   inset: 0;
@@ -35,7 +34,6 @@ body {
   opacity: 0.4;
 }
 
-/* ---- TEXT ---- */
 .text {
   position: relative;
   text-align: center;
@@ -49,7 +47,6 @@ body {
   margin: 0.2em 0;
 }
 
-/* ---- SOUND BUTTON ---- */
 .sound-btn {
   position: absolute;
   top: 24px;
