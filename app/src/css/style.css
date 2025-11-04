@@ -1,26 +1,20 @@
 :root {
-  --bg: #0d0d0f;
+  --bg: #0f0e0d;
   --text: #f4f4f4;
   --muted: #b7b7c1;
   --card: #141419cc;
-  /* translucent so blobs glow through */
-  --border: rgba(255, 255, 255, 0.08);
+
+  --card-border: rgba(255, 255, 255, 0.08);
   --accent: #ff7a1a;
+  --accent-2: #ff5078;
 
   --panel: #121218;
-  --ink: #f4f4f4;
-  --muted: #b7b7c1;
-  --line: rgba(255, 255, 255, 0.08);
-  --accent: #ff8c00;
-  --accent-2: #ff5078;
+  --ticket-border: rgba(255, 255, 255, 0.08);
   --ok: #63ffa2;
-  --warn: #ffd66b;
   --blob-hue: 0deg;
   --blob-sat: 1.2;
   --blob-bright: 1;
   --blob-opacity: 0.45;
-  --overlay-opacity: 0;
-  --overlay-blur: 0px;
 
   --col-span-normal: 2;
   --col-span-wide: 2;
@@ -38,6 +32,22 @@
   --gB: #f1d36d;
   --gC: #ff9b6a;
   --gF: #ff6b6b;
+
+  --main-font: "Red Hat Display", sans-serif;
+
+  --font-size-base: 1.1rem;
+  --font-size-large: 1.5rem;
+  --font-size-xlarge: 2rem;
+  --font-size-xxlarge: 3rem;
+  --font-size-small: 0.875rem;
+
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
 }
 
 html,
@@ -45,16 +55,15 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Red Hat Display", system-ui, sans-serif;
-  /* this helps anchor jumps, not wheel scrolling, but harmless */
+  font-family: var(--main-font);
   scroll-behavior: smooth;
+  font-size: var(--font-size-base);
 }
 
 * {
   box-sizing: border-box;
 }
 
-/* Eternal background blobs */
 .bg {
   position: fixed;
   inset: 0;
@@ -90,7 +99,7 @@ body {
   opacity: var(--overlay-opacity);
   filter: blur(var(--overlay-blur));
 }
-/* Content above the background */
+
 .content {
   position: relative;
   z-index: 1;
@@ -104,7 +113,7 @@ body {
   text-align: center;
   padding: 6vh 5vw;
 }
-/* Intro hero text */
+
 .hero {
   min-height: 100vh;
   display: grid;
@@ -125,7 +134,6 @@ body {
   transform: translateY(40px);
 }
 
-/* Story sections */
 .spacer {
   height: 8vh;
 }
@@ -141,7 +149,7 @@ section.panel {
   max-width: 960px;
   width: 100%;
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--card-border);
   border-radius: 20px;
   padding: clamp(20px, 4vw, 36px);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
@@ -168,10 +176,9 @@ section.panel {
 .card p {
   margin: 0.6em 0 0 0;
   color: var(--muted);
-  font-size: clamp(16px, 2.2vw, 20px);
   line-height: 1.6;
 }
-/* ---- SOUND BUTTON ---- */
+
 .sound-btn {
   position: fixed;
   top: 24px;
@@ -210,7 +217,6 @@ section.panel {
   transform: translateY(6px);
 }
 
-/* Tickets under the CTA - detailed build */
 .tickets-wrap {
   margin-top: 1.25rem;
   display: grid;
@@ -233,10 +239,10 @@ section.panel {
 
 .ticket {
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid var(--ticket-border);
   border-radius: 14px;
   padding: 12px 12px 12px 14px;
-  color: var(--ink);
+  color: var(--text);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   display: grid;
   grid-template-columns: 10px 1fr;
@@ -246,7 +252,6 @@ section.panel {
   will-change: transform, opacity;
 }
 
-/* left color strip + dot */
 .ticket__strip {
   grid-row: 1 / span 4;
   width: 10px;
@@ -271,14 +276,13 @@ section.panel {
   line-height: 1;
   padding: 0.3rem 0.5rem;
   border-radius: 999px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--ticket-border);
   color: var(--muted);
 }
 
-/* item list */
 .ticket__items {
   margin-top: 6px;
-  border: 1px dashed var(--line);
+  border: 1px dashed var(--ticket-border);
   border-radius: 10px;
   padding: 8px 10px;
   display: grid;
@@ -306,18 +310,16 @@ section.panel {
   margin-left: auto;
 }
 
-/* comment */
 .ticket__comment {
   margin-top: 8px;
   font-size: 13px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--line);
+  border: 1px solid var(--ticket-border);
   border-radius: 10px;
   padding: 8px 10px;
 }
 
-/* meta */
 .ticket__meta {
   margin-top: 8px;
   display: flex;
