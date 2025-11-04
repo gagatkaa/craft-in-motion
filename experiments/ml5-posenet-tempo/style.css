@@ -104,15 +104,12 @@ p {
   padding: 0.5rem;
   margin-top: 0.5rem;
   background-color: #fef3c7;
-  /* Light yellow */
   color: #92400e;
-  /* Dark brown/orange */
   border: 1px solid #fcd34d;
   border-radius: 6px;
   font-weight: 600;
   font-size: 0.875rem;
   display: none;
-  /* Hidden by default */
 }
 
 #camera-selection-panel {
