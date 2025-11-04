@@ -6,8 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pinned tickets fall in, then continue</title>
 
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+
 
     <style>
         :root {
@@ -104,17 +103,17 @@
 
     <div class="spacer">You’re free to continue</div>
 
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
     <script>
         gsap.registerPlugin(ScrollTrigger);
 
         const tickets = gsap.utils.toArray(".ticket");
 
-        // Timeline tied to scroll while pinned.
         const tl = gsap.timeline({
             defaults: { ease: "power2.out" }
         });
 
-        // Drop all tickets from top into their grid spots with a stagger
         tl.to(tickets, {
             y: 0,
             opacity: 1,
@@ -122,7 +121,6 @@
             stagger: { each: 0.12 }
         });
 
-        // Small settle effect at the end (optional)
         tl.to(tickets, {
             y: "+=6",
             duration: 0.2
@@ -131,29 +129,17 @@
             duration: 0.25
         });
 
-        // ScrollTrigger: pin the section until the whole sequence is done.
         ScrollTrigger.create({
             trigger: "#cta",
             start: "top top",
-            end: "+=1400",           // increase to stay longer
+            end: "+=1400",
             pin: true,
-            scrub: true,             // user scroll controls the timeline progress
+            scrub: true,
             animation: tl,
-            // markers: true          // uncomment to debug
+            // markers: true          
         });
 
-        /*
-          Alternative behavior (auto-play while pinned, no scrub):
-          ScrollTrigger.create({
-            trigger: "#cta",
-            start: "top top",
-            pin: true,
-            end: "+=1", // tiny, we control release manually
-            onEnter: () => tl.play(),
-            onEnterBack: () => tl.progress(0).play(),
-            onLeave: self => self.disable(), // release after animation
-          });
-        */
+
     </script>
 </body>
 
