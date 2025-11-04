@@ -19,14 +19,18 @@
             height: auto;
             cursor: pointer;
         }
+
+        h1 {
+            color: white;
+            font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+        }
     </style>
 
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/MorphSVGPlugin.min.js"></script>
+
 </head>
 
 <body>
-
+    <h1>Press on the shape to morph it.</h1>
     <svg viewBox="0 0 82 251" aria-label="Mini morph circle to shaker">
 
         <path id="circle" fill="#D37624" d="M41,100 a20,20 0 1,0 0,40 a20,20 0 1,0 0,-40" />
@@ -37,7 +41,8 @@
         </g>
 
     </svg>
-
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/MorphSVGPlugin.min.js"></script>
     <script>
         gsap.registerPlugin(MorphSVGPlugin);
 

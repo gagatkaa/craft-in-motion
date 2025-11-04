@@ -7,9 +7,7 @@
     <title>GSAP scrollTrigger CTA</title>
     <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;600;800&display=swap"
         rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/TextPlugin.min.js"></script>
+
     <link rel="stylesheet" href="style.css">
 
 
@@ -187,12 +185,14 @@
     <footer class="tail">
         <div>End</div>
     </footer>
-
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/TextPlugin.min.js"></script>
     <script>
 
         gsap.registerPlugin(ScrollTrigger, TextPlugin);
 
-       
+
         const tl = gsap.timeline({
             scrollTrigger: {
                 trigger: "#ctaStage",
