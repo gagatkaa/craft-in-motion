@@ -45,7 +45,14 @@ During each test, I observed:
 
 ---
 
-## 4. Observations
+## 4. Screenshots
+
+![Low lighting warning](/experiments/robustness-test/images/low-light.png)
+![Move back warning](/experiments/robustness-test/images/move-back.png)
+![No face warning](/experiments/robustness-test/images/no-face.png)
+![Covered face warning](/experiments/robustness-test/images/covered-face.png)
+
+## 5. Observations
 
 - The experiment works best with **even light** and a **light background**.
 - **Top-half body visibility** is essential for PoseNet to detect joints accurately.
@@ -57,7 +64,7 @@ During each test, I observed:
 
 ---
 
-## 5. Improvements
+## 6. Improvements
 
 Based on the robustness results, I could improve the system by:
 
@@ -68,7 +75,7 @@ Based on the robustness results, I could improve the system by:
 
 ---
 
-## 6. Conclusion
+## 7. Conclusion
 
 The current setup of the ML5 PoseNet “Tempo Tracker” is **robust under normal lighting and framing conditions**, and it **handles safety and low-light cases**.  
 The main limitations appear in low-quality cameras or when the user moves too close to the lens.  
