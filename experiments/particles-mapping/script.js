@@ -1,6 +1,14 @@
+// Particles visual that follows the SAME ML-tempo plumbing as the pulse circle:
+// - listens for window.postMessage({ type:'ml:tempo', hz })
+// - exposes window.setTempoHz(hz) for manual triggering
+// - smoothStep + idleRelax back to REST_HZ when no new data arrives
+// - uses gsap.ticker with lag smoothing disabled in index.html
+
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const tempoVal = document.getElementById("tempoVal");
+const EMISSION_MULT = 2.0; // 1.0 default - increase for more particles
+const MAX_PARTICLES = 1500; // safety cap - set higher if you want more
 
 // --- sizing ---
 function resize() {
@@ -11,45 +19,35 @@ addEventListener("resize", resize);
 resize();
 
 // --- state ---
-let tempoHz = 2.0; // current smoothed tempo (Hz)
-let flash = 0; // chwilowy błysk/glow po nowym sygnale
-let pulseScale = 0; // chwilowe powiększenie po nowym sygnale
-let lastUpdate = performance.now(); // last time we got a tempo from ML
-let radius = 60; // current drawn radius (px)
-
-// ranges
+let tempoHz = 2.0; // smoothed tempo (Hz), matches the circle logic
+let lastUpdate = performance.now();
 const MIN_HZ = 0.3,
-  MAX_HZ = 6.0; // expected wrist tempo range
-const MIN_R = 40,
-  MAX_R = 220; // circle radius range
-const REST_HZ = 1.2; // gentle “calm” fallback when idle
+  MAX_HZ = 6.0;
+const REST_HZ = 1.2; // fallback when idle (same spirit as circle)
 
-// smoothing: rise slower, fall faster (feels snappy when you stop)
+// gentle one-sided smoothing (rise slower, fall faster)
 function smoothStep(current, target) {
-  const alphaUp = 0.55; // było 0.3
-  const alphaDown = 0.85; // było 0.6
+  const alphaUp = 0.55;
+  const alphaDown = 0.85;
   const a = target < current ? alphaDown : alphaUp;
   return current + a * (target - current);
 }
 
-// map helper
 function mapRange(inMin, inMax, outMin, outMax, v) {
   const t = Math.min(Math.max((v - inMin) / (inMax - inMin), 0), 1);
   return outMin + t * (outMax - outMin);
 }
 
-// set tempo from ML
+// External setter (used by ML pipeline or manual testing)
 function setTempoHz(hz) {
   const clamped = Math.max(MIN_HZ, Math.min(MAX_HZ, hz || 0));
   tempoHz = smoothStep(tempoHz, clamped);
   lastUpdate = performance.now();
   if (tempoVal) tempoVal.textContent = tempoHz.toFixed(2);
-  flash = Math.min(flash + 0.5, 1);
-  pulseScale = Math.min(pulseScale + 0.22, 0.6);
 }
-window.setTempoHz = setTempoHz; // optional for manual testing
+window.setTempoHz = setTempoHz;
 
-// if ML stops sending, relax back toward REST_HZ
+// If ML goes quiet, slowly relax tempo back to REST_HZ
 function idleRelax() {
   const now = performance.now();
   if (now - lastUpdate > 400) {
@@ -58,74 +56,115 @@ function idleRelax() {
   }
 }
 
-// listen to PoseNet iframe
-window.addEventListener("message", (e) => {
-  if (e?.data?.type === "ml:tempo") setTempoHz(e.data.hz);
+// Listen for cross-window PoseNet messages (same key as circle)
+addEventListener("message", (e) => {
+  if (e?.data?.type === "ml:tempo" && Number.isFinite(e.data.hz)) {
+    setTempoHz(e.data.hz);
+  }
 });
-// also support same-window custom event (optional)
-window.addEventListener("ml:tempo", (e) => {
+// Also support same-window custom event (optional)
+addEventListener("ml:tempo", (e) => {
   if (e?.detail?.hz != null) setTempoHz(e.detail.hz);
 });
 
-// draw loop
+// ---- particles system ----
+const particles = [];
+const center = { x: innerWidth * 0.5, y: innerHeight * 0.6 };
+
+// Map ML tempo to particle params
+function paramsFromTempo(tHz) {
+  // clamp to expected tempo range
+  const t = Math.min(Math.max(tHz, MIN_HZ), MAX_HZ);
+
+  // emission rate in particles / second (frame-rate independent)
+  const emission = mapRange(MIN_HZ, MAX_HZ, 8, 140, t) * EMISSION_MULT;
+
+  // particle size
+  const size = mapRange(MIN_HZ, MAX_HZ, 2, 6, t);
+
+  // lifetime (seconds)
+  const life = mapRange(MIN_HZ, MAX_HZ, 1.2, 0.45, t);
+
+  // brightness 0..1 (drives color & glow)
+  const brightness = mapRange(MIN_HZ, MAX_HZ, 0.5, 1.0, t);
+
+  // base speed (px/s)
+  const speed = mapRange(MIN_HZ, MAX_HZ, 60, 220, t);
+
+  return { emission, size, life, brightness, speed };
+}
+
+function spawnParticle(par) {
+  const angle = Math.random() * Math.PI * 2;
+  const speed = par.speed * (0.6 + Math.random() * 0.8); // some variance
+  particles.push({
+    x: center.x,
+    y: center.y,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    size: par.size * (0.7 + Math.random() * 0.6),
+    life: par.life,
+    age: 0,
+    brightness: par.brightness,
+  });
+}
+
+// Frame-rate independent emission using an accumulator
+let emitAcc = 0;
+
 gsap.ticker.add(() => {
   idleRelax();
 
-  const dr = gsap.ticker.deltaRatio();
+  const dr = gsap.ticker.deltaRatio(); // how much slower/faster than 60fps
+  const dt = dr / 60; // seconds elapsed this tick
+  const par = paramsFromTempo(tempoHz);
 
-  // compute target radius & color from CURRENT tempo
-  const targetRRaw = mapRange(MIN_HZ, MAX_HZ, MIN_R, MAX_R, tempoHz);
-  const targetR = Math.min(MAX_R, Math.max(MIN_R, targetRRaw));
+  // emission in particles/sec -> particles this frame
+  emitAcc += par.emission * dt;
+  while (emitAcc >= 1) {
+    if (particles.length < MAX_PARTICLES) spawnParticle(par);
+    emitAcc -= 1;
+  }
 
-  // ease radius so it feels organic
-  radius += (targetR - radius) * (0.35 * dr);
-  radius = Math.max(8, radius); // clamp po aktualizacji
+  // update
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.age += dt;
+    if (p.age >= p.life) {
+      particles.splice(i, 1);
+      continue;
+    }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
 
-  // color hue: slow = blue (180), fast = red (20)
-  const hue = mapRange(MIN_HZ, MAX_HZ, 180, 20, tempoHz);
-  const baseFill = `hsl(${hue}, 80%, 55%)`;
-  const glowBoost = flash * 0.35; // chwilowe podbicie światła
-  const fill = baseFill;
-
-  // clear
+  // render
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const a = 1 - p.age / p.life; // fade out
 
-  // center
-  const cx = canvas.width * 0.5;
-  const cy = canvas.height * 0.55;
+    // warm color biased by brightness
+    const b = p.brightness;
+    const r = Math.floor(255 * b);
+    const g = Math.floor(200 * b);
+    const bl = Math.floor(120 * b);
 
-  // subtle breathing even when idle
-  const pulse = Math.sin(performance.now() / 500) * 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.shadowBlur = 18 * b;
+    ctx.shadowColor = `rgba(${r},${g},${bl},0.9)`;
+    ctx.fillStyle = `rgba(${r},${g},${bl},${a})`;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+});
 
-  // --- safety clamps przed rysowaniem ---
-  if (!Number.isFinite(radius)) radius = MIN_R; // awaryjnie, gdyby kiedyś wpadło NaN
-  const safeR = Math.max(8, radius); // min 8px, żeby nie było 0/ujemnych
-  const glowRadius = Math.max(8, radius + 10 + pulse); // dla glow
-  const drawRadius = Math.max(8, safeR * (1 + pulseScale)); // dla „solid” z pulsem
-
-  // draw glow
-  ctx.beginPath();
-  ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
-  ctx.shadowBlur = 40 + glowBoost * 60; // 40..100
-  ctx.shadowColor = fill;
-  ctx.globalAlpha = 0.65 + glowBoost * 0.3; // 0.65..0.95
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.shadowBlur = 0;
-
-  // draw solid circle (+ puls po nowej próbce)
-  ctx.beginPath();
-  ctx.arc(cx, cy, drawRadius, 0, Math.PI * 2);
-  ctx.fillStyle = fill;
-  ctx.fill();
-
-  // optional stroke that tightens with speed
-  ctx.lineWidth = mapRange(MIN_HZ, MAX_HZ, 2, 8, tempoHz);
-  ctx.strokeStyle = "rgba(255,255,255,0.25)";
-  ctx.stroke();
-
-  // szybkie wygaszanie błysku i pulsu, stabilne względem FPS
-  flash *= Math.pow(0.35, dr);
-  pulseScale *= Math.pow(0.25, dr);
+// small idle bob for the emission center
+gsap.to(center, {
+  y: "+=4",
+  duration: 1.2,
+  yoyo: true,
+  repeat: -1,
+  ease: "sine.inOut",
 });

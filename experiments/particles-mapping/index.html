@@ -3,52 +3,24 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>ML signal → pulse circle</title>
+    <title>ML signal → particles (tempo-driven)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-        :root {
-            color-scheme: dark;
-        }
-
-        html,
-        body {
-            height: 100%;
-            margin: 0;
-            background: #0f1116;
-        }
-
-        #c {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-        }
-
-        #hud {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            padding: 6px 10px;
-            font: 12px/1.2 system-ui, sans-serif;
-            color: #cbd5e1;
-            background: #0b0f14aa;
-            border-radius: 8px;
-        }
-
-        #hud b {
-            color: #e2e8f0;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
     <canvas id="c"></canvas>
+
+    <!-- Minimal HUD with current tempo like the circle demo -->
     <div id="hud">tempo: <b id="tempoVal">—</b> Hz</div>
 
+    <!-- GSAP (no lag smoothing for real-time feel, same as circle demo) -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script>
-        // ważne: usuwa dodatkowe wygładzanie i opóźnianie klatek
         gsap.ticker.lagSmoothing(0);
     </script>
+
+    <!-- Particles renderer driven by ML tempo messages -->
     <script src="script.js"></script>
 </body>
 
