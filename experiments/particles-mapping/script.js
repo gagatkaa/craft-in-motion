@@ -1,16 +1,9 @@
-// Particles visual that follows the SAME ML-tempo plumbing as the pulse circle:
-// - listens for window.postMessage({ type:'ml:tempo', hz })
-// - exposes window.setTempoHz(hz) for manual triggering
-// - smoothStep + idleRelax back to REST_HZ when no new data arrives
-// - uses gsap.ticker with lag smoothing disabled in index.html
-
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const tempoVal = document.getElementById("tempoVal");
-const EMISSION_MULT = 2.0; // 1.0 default - increase for more particles
-const MAX_PARTICLES = 1500; // safety cap - set higher if you want more
+const EMISSION_MULT = 2.0;
+const MAX_PARTICLES = 1500;
 
-// --- sizing ---
 function resize() {
   canvas.width = innerWidth;
   canvas.height = innerHeight;
@@ -18,14 +11,12 @@ function resize() {
 addEventListener("resize", resize);
 resize();
 
-// --- state ---
-let tempoHz = 2.0; // smoothed tempo (Hz), matches the circle logic
+let tempoHz = 2.0;
 let lastUpdate = performance.now();
 const MIN_HZ = 0.3,
   MAX_HZ = 6.0;
-const REST_HZ = 1.2; // fallback when idle (same spirit as circle)
+const REST_HZ = 1.2;
 
-// gentle one-sided smoothing (rise slower, fall faster)
 function smoothStep(current, target) {
   const alphaUp = 0.55;
   const alphaDown = 0.85;
@@ -38,7 +29,6 @@ function mapRange(inMin, inMax, outMin, outMax, v) {
   return outMin + t * (outMax - outMin);
 }
 
-// External setter (used by ML pipeline or manual testing)
 function setTempoHz(hz) {
   const clamped = Math.max(MIN_HZ, Math.min(MAX_HZ, hz || 0));
   tempoHz = smoothStep(tempoHz, clamped);
@@ -47,7 +37,6 @@ function setTempoHz(hz) {
 }
 window.setTempoHz = setTempoHz;
 
-// If ML goes quiet, slowly relax tempo back to REST_HZ
 function idleRelax() {
   const now = performance.now();
   if (now - lastUpdate > 400) {
@@ -56,22 +45,19 @@ function idleRelax() {
   }
 }
 
-// Listen for cross-window PoseNet messages (same key as circle)
 addEventListener("message", (e) => {
   if (e?.data?.type === "ml:tempo" && Number.isFinite(e.data.hz)) {
     setTempoHz(e.data.hz);
   }
 });
-// Also support same-window custom event (optional)
+
 addEventListener("ml:tempo", (e) => {
   if (e?.detail?.hz != null) setTempoHz(e.detail.hz);
 });
 
-// ---- particles system ----
 const particles = [];
 const center = { x: innerWidth * 0.5, y: innerHeight * 0.6 };
 
-// Map ML tempo to particle params
 function paramsFromTempo(tHz) {
   // clamp to expected tempo range
   const t = Math.min(Math.max(tHz, MIN_HZ), MAX_HZ);
@@ -96,7 +82,7 @@ function paramsFromTempo(tHz) {
 
 function spawnParticle(par) {
   const angle = Math.random() * Math.PI * 2;
-  const speed = par.speed * (0.6 + Math.random() * 0.8); // some variance
+  const speed = par.speed * (0.6 + Math.random() * 0.8);
   particles.push({
     x: center.x,
     y: center.y,
@@ -109,24 +95,21 @@ function spawnParticle(par) {
   });
 }
 
-// Frame-rate independent emission using an accumulator
 let emitAcc = 0;
 
 gsap.ticker.add(() => {
   idleRelax();
 
   const dr = gsap.ticker.deltaRatio(); // how much slower/faster than 60fps
-  const dt = dr / 60; // seconds elapsed this tick
+  const dt = dr / 60;
   const par = paramsFromTempo(tempoHz);
 
-  // emission in particles/sec -> particles this frame
   emitAcc += par.emission * dt;
   while (emitAcc >= 1) {
     if (particles.length < MAX_PARTICLES) spawnParticle(par);
     emitAcc -= 1;
   }
 
-  // update
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.age += dt;
@@ -138,13 +121,11 @@ gsap.ticker.add(() => {
     p.y += p.vy * dt;
   }
 
-  // render
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     const a = 1 - p.age / p.life; // fade out
 
-    // warm color biased by brightness
     const b = p.brightness;
     const r = Math.floor(255 * b);
     const g = Math.floor(200 * b);
@@ -160,7 +141,6 @@ gsap.ticker.add(() => {
   }
 });
 
-// small idle bob for the emission center
 gsap.to(center, {
   y: "+=4",
   duration: 1.2,

@@ -49,12 +49,11 @@ function getShoulderDist(dict) {
   return Math.hypot(L.x - R.x, L.y - R.y);
 }
 
-// rozmiar „blisko kamery” (w px między barkami). 200 to sensowny start dla 640×480 wyświetlania.
 const SHOULDER_BASE = 200;
 
 function dynamicThresholds(dict) {
   const dist = getShoulderDist(dict) || SHOULDER_BASE;
-  // im mniejszy dystans barków → jesteś dalej → skala rośnie
+
   const scale = clamp(SHOULDER_BASE / dist, 0.6, 3.0);
   return {
     MIN_MOVE: Math.round(MIN_MOVEMENT_THRESHOLD * scale),
@@ -130,23 +129,22 @@ function checkHandsShakerInFrontOfFace(pose, opts = {}) {
   const isUnsafe = offenders.length > 0;
   return { isUnsafe, faceRect, offenders, tips: { tipR, tipL } };
 }
-// Lock processing to the measured hand by zeroing the opposite side joints.
+
 const LOCK_HAND = true;
 function lockToMeasuredHand(pose, hand) {
   if (!pose) return pose;
   const opp = hand === "right" ? "left" : "right";
-  // zero-out confidence/score on the opposite arm joints
+
   ["Shoulder", "Elbow", "Wrist"].forEach((J) => {
     const k = pose[opp + J];
     if (k) {
-      // ml5 sometimes uses .confidence, sometimes .score; set both to be safe
       k.confidence = 0;
       k.score = 0;
     }
   });
   return pose;
 }
-// Turn pose.keypoints[] into a dictionary: { rightWrist: {x,y,score}, ... }
+
 function asDict(pose) {
   const d = {};
   if (!pose?.keypoints) return d;
@@ -158,17 +156,15 @@ function asDict(pose) {
       confidence: k.score ?? k.confidence ?? 0,
     };
   }
-  // also alias names like 'rightWrist' etc. (ml5 parts already match these)
+
   return d;
 }
 
-// Safe getter for a body part with a min confidence
 function getPart(dict, part, min = 0.4) {
   const k = dict?.[part];
   return k && (k.score ?? 0) >= min ? k : null;
 }
 
-// Pairs for one arm skeleton
 const ARM_LINKS = {
   right: [
     ["rightShoulder", "rightElbow"],
@@ -274,9 +270,9 @@ const sketch = (p) => {
       {
         flipHorizontal: true,
         detectionType: "single",
-        inputResolution: 513, // kluczowe przy „małej” sylwetce
-        multiplier: 0.75, // 1.0 jeszcze dokładniej, ale wolniej
-        stride: 16, // alias outputStride w części buildów ml5
+        inputResolution: 513,
+        multiplier: 0.75,
+        stride: 16,
       },
       p.modelReady
     );
@@ -353,21 +349,16 @@ const sketch = (p) => {
     const safetyBanner = document.getElementById("safety-warning");
 
     if (poses.length > 0) {
-      // Build a dict view and use ONLY the selected hand downstream
       const rawPose = poses[0].pose;
       const dict = asDict(rawPose);
 
-      // Draw only selected arm keypoints
       p.drawKeypoints(dict);
 
-      // Draw only selected arm skeleton
       p.drawSelectedArmSkeleton(dict, measuredHand);
 
-      // Calculations use dict restricted by measuredHand
       p.calculateTempo(dict, now);
       p.calculateElbowAngle(dict);
 
-      // Safety also reads from dict (eyes/nose + both wrists/elbows are present in dict)
       const res = checkHandsShakerInFrontOfFace(dict, {
         minConf: 0.35,
         padK: 0.8,
@@ -417,16 +408,13 @@ const sketch = (p) => {
   };
 
   p.calculateTempo = (dict, now) => {
-    // 1) NAJPIERW pobierz element HUD
     const tempoDisplay = document.getElementById("tempo-display");
 
-    // 2) Adaptacyjne progi (jeśli dodałeś dynamicThresholds)
     const DT = dynamicThresholds ? dynamicThresholds(dict) : null;
     const MIN_MOVE = DT ? DT.MIN_MOVE : MIN_MOVEMENT_THRESHOLD;
     const JITTER = DT ? DT.JITTER : JITTER_MOVEMENT_THRESHOLD;
     const minConf = DT ? DT.minConfForArm : 0.5;
 
-    // 3) Dane ręki
     const wristName = measuredHand + "Wrist";
     const wrist = getPart(dict, wristName, minConf);
     if (!wrist) {
@@ -434,12 +422,10 @@ const sketch = (p) => {
       return;
     }
 
-    // 4) Historia Y
     const y = wrist.y;
     wristYHistory.push(y);
     if (wristYHistory.length > WRIST_HISTORY_LENGTH) wristYHistory.shift();
 
-    // 5) Filtr „jitteru”
     if (wristYHistory.length >= WRIST_HISTORY_LENGTH) {
       const minY = Math.min(...wristYHistory);
       const maxY = Math.max(...wristYHistory);
@@ -451,7 +437,6 @@ const sketch = (p) => {
       }
     }
 
-    // 6) Detekcja beatu i BPM
     if (wristYHistory.length > 10) {
       const fiveAgo = wristYHistory[wristYHistory.length - 5];
       const vel = y - fiveAgo;
@@ -506,11 +491,10 @@ const sketch = (p) => {
     }
 
     let v1x = shoulder.x - elbow.x,
-      v1y = shoulder.y - elbow.y; // upper arm
+      v1y = shoulder.y - elbow.y;
     let v2x = wrist.x - elbow.x,
-      v2y = wrist.y - elbow.y; // forearm
+      v2y = wrist.y - elbow.y;
 
-    // normalize
     const m1 = Math.hypot(v1x, v1y),
       m2 = Math.hypot(v2x, v2y);
     if (m1 === 0 || m2 === 0) {

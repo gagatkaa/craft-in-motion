@@ -1,8 +1,3 @@
-:root {
-  color-scheme: dark;
-}
-
-html,
 body {
   height: 100%;
   margin: 0;
@@ -19,7 +14,6 @@ canvas {
   display: block;
 }
 
-/* Minimal HUD box */
 #hud {
   position: fixed;
   top: 12px;

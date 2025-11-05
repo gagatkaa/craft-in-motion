@@ -38,6 +38,9 @@ let baselineEAR = null,
   calibrated = false;
 const CALIB_REQUIRED_FRAMES = 20;
 
+let missingUntil = 0;
+const MISSING_HOLD_MS = 700;
+
 const smileStatusEl = () => document.getElementById("smile-status");
 
 const IDX = {
@@ -221,7 +224,7 @@ const sketch = (p) => {
       facemesh = ml5.facemesh(video, () => {
         const s = smileStatusEl();
         s.className = "badge mid";
-        s.textContent = "Ładowanie modelu…";
+        s.textContent = "Loading model...";
       });
       facemesh.on("predict", (res) => {
         fmPredictions = res;
@@ -295,13 +298,35 @@ const sketch = (p) => {
       lastLuminance < LOW_LIGHT_THRESHOLD ? "block" : "none";
   };
 
+  function checkFraming(pose) {
+    const leftWrist = pose.keypoints.find((k) => k.part === "leftWrist");
+    const rightWrist = pose.keypoints.find((k) => k.part === "rightWrist");
+
+    const missingWrists =
+      (!leftWrist || leftWrist.score < 0.2) &&
+      (!rightWrist || rightWrist.score < 0.2);
+
+    return { isMissing: missingWrists };
+  }
+
   p.drawPoseData = () => {
     const now = p.millis();
     const safetyBanner = document.getElementById("safety-warning");
+    const framingWarning = document.getElementById("framing-warning");
 
-    if (poses.length > 0) {
-      const pose = poses[0].pose;
+    const pose = poses.length > 0 ? poses[0].pose : null;
 
+    if (pose) {
+      const frameCheck = checkFraming(pose);
+      if (frameCheck.isMissing) {
+        missingUntil = now + MISSING_HOLD_MS;
+      }
+    } else {
+      missingUntil = now + MISSING_HOLD_MS;
+    }
+    framingWarning.style.display = now < missingUntil ? "block" : "none";
+
+    if (pose) {
       p.calculateTempo(pose, now);
       p.calculateElbowAngle(pose);
 
@@ -313,7 +338,6 @@ const sketch = (p) => {
       if (res.isUnsafe) unsafeUntil = now + UNSAFE_HOLD_MS;
       safetyBanner.style.display = now < unsafeUntil ? "block" : "none";
 
-      // debug: draw face rect
       if (res.faceRect) {
         p.push();
         p.noFill();
@@ -538,7 +562,7 @@ p5.prototype.updateSmileDetector = function () {
   const el = smileStatusEl();
   if (!smileModelReady) {
     el.className = "badge mid";
-    el.textContent = "Ładowanie modelu…";
+    el.textContent = "Loading model...";
     return;
   }
 
