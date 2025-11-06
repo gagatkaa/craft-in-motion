@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GSAP ScrollTrigger Story</title>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="bg" aria-hidden="true">
+        <div class="blob" id="b1"></div>
+        <div class="blob" id="b2"></div>
+        <div class="blob" id="b3"></div>
+        <div class="blob" id="b4"></div>
+        <div class="blob" id="b5"></div>
+        <div class="blob" id="b6"></div>
+    </div>
+
+    <div class="content">
+        <header class="hero">
+            <div class="intro">
+                <h1>Smile</h1>
+                <h1>Pour</h1>
+                <h1>Repeat</h1>
+            </div>
+        </header>
+
+        <main>
+            <div class="spacer"></div>
+
+            <section class="panel">
+                <div class="card step" data-from="left">
+                    <div class="eyebrow">Prologue</div>
+                    <h2>Behind every cocktail there is craft and repetition</h2>
+                    <p>Warm light, cold ice, steady hands. Rhythm meets precision and small rituals become muscle
+                        memory.</p>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="card step" data-from="right">
+                    <div class="eyebrow">In Flow</div>
+                    <h2>Tempo guides the motion and the motion guides the smile</h2>
+                    <p>Shake, strain, wipe, reset. Movements loop with intention. We measure the invisible beats guests
+                        never notice.</p>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="card step" data-from="bottom">
+                    <div class="eyebrow">Pressure</div>
+                    <h2>When the queue grows, control becomes choreography</h2>
+                    <p>Order after order, decisions compress into seconds. Consistency tells the story. Later this
+                        reacts to live signals.</p>
+                </div>
+            </section>
+
+            <div class="spacer"></div>
+        </main>
+    </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/ScrollTrigger.min.js"></script>
+    <script>
+        gsap.registerPlugin(ScrollTrigger);
+
+
+
+
+        gsap.timeline({ delay: .3 })
+            .to(".intro h1", { opacity: 1, y: 0, duration: 1.2, stagger: .45, ease: "power2.out" });
+
+        // --- STARTING POSITIONS ---
+        // top-left group
+        gsap.set("#b1", { top: "10%", left: "10%" });
+        gsap.set("#b2", { top: "15%", left: "20%" });
+        gsap.set("#b3", { top: "5%", left: "25%" });
+
+        // bottom-right group
+        gsap.set("#b4", { bottom: "10%", right: "10%" });
+        gsap.set("#b5", { bottom: "15%", right: "20%" });
+        gsap.set("#b6", { bottom: "5%", right: "25%" });
+
+        // --- blob drifting animation ---
+        gsap.to("#b1", { x: 400, y: 300, duration: 10, repeat: -1, yoyo: true, ease: "sine.inOut" });
+        gsap.to("#b2", { x: 200, y: 400, duration: 12, repeat: -1, yoyo: true, ease: "sine.inOut" });
+        gsap.to("#b3", { x: 600, y: 500, duration: 14, repeat: -1, yoyo: true, ease: "sine.inOut" });
+
+        gsap.to("#b4", { x: -200, y: -300, duration: 10, repeat: -1, yoyo: true, ease: "sine.inOut" });
+        gsap.to("#b5", { x: -300, y: -400, duration: 12, repeat: -1, yoyo: true, ease: "sine.inOut" });
+        gsap.to("#b6", { x: -400, y: -500, duration: 14, repeat: -1, yoyo: true, ease: "sine.inOut" });
+
+        // subtle global glow pulse
+        gsap.to(".bg", {
+            opacity: 0.5,
+            duration: 6,
+            yoyo: true,
+            repeat: -1,
+            ease: "sine.inOut"
+        });
+
+
+        const steps = gsap.utils.toArray(".step");
+        steps.forEach((el) => {
+            const from = el.dataset.from || "left";
+            const vars = { opacity: 0 };
+            if (from === "left") vars.x = -220;
+            if (from === "right") vars.x = 220;
+            if (from === "bottom") vars.y = 120;
+
+
+            const tl = gsap.timeline({
+                scrollTrigger: {
+                    trigger: el,
+                    start: "top 85%",
+                    end: "top 50%",
+                    scrub: 0.8,
+                    markers: true,
+                }
+            });
+
+            tl.fromTo(el, vars, { x: 0, y: 0, opacity: 1, ease: "none" });
+
+        });
+
+
+        gsap.to(".intro", {
+            yPercent: -8, ease: "none",
+            scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: true }
+        });
+    </script>
+</body>
+
+</html>
