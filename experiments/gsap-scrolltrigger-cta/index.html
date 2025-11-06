@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GSAP scrollTrigger CTA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;600;800&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+
+
+</head>
+
+<body>
+    <header class="hero">
+        <div>Scroll down</div>
+    </header>
+
+    <section id="ctaStage" class="stage">
+
+        <div class="bg" aria-hidden="true">
+            <div class="blob" id="b1"></div>
+            <div class="blob" id="b2"></div>
+            <div class="blob" id="b3"></div>
+            <div class="blob" id="b4"></div>
+            <div class="blob" id="b5"></div>
+            <div class="blob" id="b6"></div>
+        </div>
+        <div class="overlay" aria-hidden="true"></div>
+
+        <div class="content">
+            <div>
+                <h2 id="ctaText">Are you ready to try it for yourself ?</h2>
+
+                <div class="tickets-wrap">
+                    <p id="ordersCaption" style="opacity:0; transform:translateY(8px); margin-bottom:8px;">
+                        Orders are stacking up. Focus and pull them in.
+                    </p>
+
+                    <div class="tickets-grid" id="ticketsGrid">
+                        <article class="ticket" aria-label="Order 241">
+                            <div class="ticket__strip"></div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0241</div>
+                                <span class="ticket__chip">Priority</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">2x</span>
+                                    <span class="ticket__name">Mocktail Citrus</span>
+                                    <span class="ticket__note">no ice</span>
+                                </div>
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Lime Shot</span>
+                                    <span class="ticket__note">extra sour</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: guest is in a hurry, keep it crisp</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:40</span>
+                                <span class="meta__status">queued</span>
+                            </div>
+                        </article>
+
+                        <article class="ticket" aria-label="Order 242">
+                            <div class="ticket__strip" style="background:linear-gradient(180deg, #6aa8ff, #7bffea)">
+                            </div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0242</div>
+                                <span class="ticket__chip">Standard</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Espresso Tonic</span>
+                                    <span class="ticket__note">normal ice</span>
+                                </div>
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Orange Zest</span>
+                                    <span class="ticket__note">garnish</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: no sugar syrup</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:32</span>
+                                <span class="meta__status" style="color:var(--warn)"><span
+                                        style="display:none"></span>prep</span>
+                            </div>
+                        </article>
+
+                        <article class="ticket" aria-label="Order 243">
+                            <div class="ticket__strip" style="background:linear-gradient(180deg, #8fff9f, #39f0d0)">
+                            </div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0243</div>
+                                <span class="ticket__chip">Standard</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">3x</span>
+                                    <span class="ticket__name">Virgin Mule</span>
+                                    <span class="ticket__note">ginger +</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: table wants copper mugs</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:25</span>
+                                <span class="meta__status">queued</span>
+                            </div>
+                        </article>
+
+                        <article class="ticket" aria-label="Order 244">
+                            <div class="ticket__strip" style="background:linear-gradient(180deg, #ff9b6b, #ff6bd5)">
+                            </div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0244</div>
+                                <span class="ticket__chip">Rush</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Cold Brew</span>
+                                    <span class="ticket__note">no milk</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: take-out lid</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:18</span>
+                                <span class="meta__status">queued</span>
+                            </div>
+                        </article>
+                        <article class="ticket" aria-label="Order 244">
+                            <div class="ticket__strip" style="background:linear-gradient(180deg, #ff9b6b, #ff6bd5)">
+                            </div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0244</div>
+                                <span class="ticket__chip">Rush</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Cold Brew</span>
+                                    <span class="ticket__note">no milk</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: take-out lid</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:18</span>
+                                <span class="meta__status">queued</span>
+                            </div>
+                        </article>
+                        <article class="ticket" aria-label="Order 244">
+                            <div class="ticket__strip" style="background:linear-gradient(180deg, #ff9b6b, #ff6bd5)">
+                            </div>
+                            <div class="ticket__head">
+                                <div class="ticket__id">#0244</div>
+                                <span class="ticket__chip">Rush</span>
+                            </div>
+                            <div class="ticket__items">
+                                <div class="ticket__row">
+                                    <span class="ticket__qty">1x</span>
+                                    <span class="ticket__name">Cold Brew</span>
+                                    <span class="ticket__note">no milk</span>
+                                </div>
+                            </div>
+                            <div class="ticket__comment">Comment: take-out lid</div>
+                            <div class="ticket__meta">
+                                <span class="meta__eta">ETA 00:18</span>
+                                <span class="meta__status">queued</span>
+                            </div>
+                        </article>
+
+                    </div>
+                </div>
+            </div>
+            <button id="ctaBtn" class="ctaBtn" type="button">Start</button>
+
+        </div>
+    </section>
+
+    <footer class="tail">
+        <div>End</div>
+    </footer>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/TextPlugin.min.js"></script>
+    <script>
+
+        gsap.registerPlugin(ScrollTrigger, TextPlugin);
+
+
+        const tl = gsap.timeline({
+            scrollTrigger: {
+                trigger: "#ctaStage",
+                start: "top top",
+                end: "+=1700",
+                scrub: 0.7,
+                pin: true,
+                anticipatePin: 1
+                // markers:true
+            }
+        });
+
+
+        // top-left group
+        gsap.set("#b1", { top: "10%", left: "10%" });
+        gsap.set("#b2", { top: "15%", left: "20%" });
+        gsap.set("#b3", { top: "5%", left: "25%" });
+
+        // bottom-right group
+        gsap.set("#b4", { bottom: "10%", right: "10%" });
+        gsap.set("#b5", { bottom: "15%", right: "20%" });
+        gsap.set("#b6", { bottom: "5%", right: "25%" });
+
+
+        gsap.to("#b1", {
+            x: 400,
+            y: 300,
+            duration: 10,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut"
+        });
+
+        gsap.to("#b2", {
+            x: 200,
+            y: 400,
+            duration: 12,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut"
+        });
+
+        gsap.to("#b3", {
+            x: 600,
+            y: 500,
+            duration: 14,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut"
+        });
+        gsap.to("#b4", {
+            x: -200,
+            y: -300,
+            duration: 10,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut"
+        });
+        gsap.to("#b5", {
+            x: -300,
+            y: -400,
+            duration: 12,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut"
+        });
+        gsap.to("#b6", {
+            x: -400,
+            y: -500,
+            duration: 14,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut"
+        });
+
+        gsap.to(".bg", {
+            opacity: 0.5,
+            duration: 6,
+            yoyo: true,
+            repeat: -1,
+            ease: "sine.inOut"
+        });
+        // Blobs color ramp
+        tl.to(":root", {
+            "--overlay-opacity": 1,
+            "--overlay-blur": "2px",
+            "--blob-sat": 2.4,
+            "--blob-opacity": 0.70,
+            duration: 0.7, ease: "power2.out"
+        }, 0).to(":root", {
+            "--blob-hue": "120deg",
+            "--blob-bright": 1.15,
+            duration: 1.0, ease: "none"
+        }, 0.1);
+
+
+        gsap.set("#ctaText", { text: "" });
+        tl.to("#ctaText", { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "power2.out" }, 0.6)
+            .to("#ctaText", { text: "Are you ready to try it for yourself ?", duration: 1.0, ease: "none" }, 0.62)
+            .to("#ctaBtn", { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.85);
+
+
+        tl.to("#ordersCaption", { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, 1.05);
+
+
+        const tickets = gsap.utils.toArray("#ticketsGrid .ticket");
+        tl.to(tickets, {
+            y: 0,
+            opacity: 1,
+            duration: 0.9,
+            ease: "power2.out",
+            stagger: { each: 0.14 }
+        }, 1.12)
+            .to(tickets, { y: "+=6", duration: 0.2 }, ">")
+            .to(tickets, { y: "-=6", duration: 0.25 }, ">");
+
+
+        document.getElementById("ctaBtn").addEventListener("click", () => alert("Proceed to interaction"));
+    </script>
+</body>
+
+</html>
