@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ML5 PoseNet Shaking</title>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+
+
+
+
+</head>
+
+<body>
+    <div class="container">
+        <h1>PoseNet Live Tempo Tracker</h1>
+        <p><b>ML5 Experiment:</b> Wrist speed + control of the elbow angle of the holding hand.</p>
+
+        <div id="camera-selection-panel">
+            <div class="status-item">
+                <span class="status-label">Select Camera:</span>
+                <select id="camera-select"></select>
+            </div>
+        </div>
+
+
+        <div id="hand-selection-panel" class="panel">
+            <div class="status-item">
+                <span class="status-label">Measured Hand:</span>
+                <label style="margin-left:8px;"><input type="radio" name="hand" value="right" checked /> Right</label>
+                <label style="margin-left:12px;"><input type="radio" name="hand" value="left" /> Left</label>
+            </div>
+        </div>
+
+
+        <div class="panel">
+            <div class="status-item">
+                <span class="status-label">Model Status:</span>
+                <span id="status-text">Awaiting Permission...</span>
+            </div>
+            <div class="status-item" style="text-align:right;">
+                <span class="status-label">Tempo (BPM):</span>
+                <span id="tempo-display">0.0</span>
+            </div>
+        </div>
+
+
+        <div class="panel">
+            <div class="status-item">
+                <span class="status-label">Elbow Angle (°):</span>
+                <span id="elbow-angle">-</span>
+            </div>
+            <div class="status-item" style="text-align:right;">
+                <span class="status-label">Form:</span>
+                <span id="form-status">-</span>
+            </div>
+        </div>
+
+
+        <div id="low-light-warning" class="warning-banner">
+            ⚠️ Low Light Detected. Please increase illumination for better tracking.
+        </div>
+        <div id="safety-warning" class="warning-banner">
+            🛑 Do not cover your face with the shaker or your hands. Move the equipment away from your line of sight.
+        </div>
+
+
+        <div id="p5-canvas-container" style="display:flex;justify-content:center;"></div>
+
+
+        <div class="info-panel">
+            <h3>Logic:</h3>
+            <ul>
+                <li>Tempo is measured from the selected wrist (downbeat detected from downward motion + jitter filter).
+                </li>
+                <li>Elbow angle = the angle between the vectors <i>shoulder→elbow</i> and <i>wrist→elbow</i>.</li>
+                <li>Form is OK when the angle stays within the default range of 10°-75°.</li>
+                <li>An arc is drawn at the elbow: green (OK) / red (Adjust).</li>
+                <li>Safety: warning appears when hands or the shaker intersect the face area.</li>
+            </ul>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>

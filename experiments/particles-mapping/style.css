@@ -1,0 +1,27 @@
+body {
+  height: 100%;
+  margin: 0;
+  background: #0b0c11;
+  color: #e8ecf1;
+  font-family: system-ui, sans-serif;
+}
+
+canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  padding: 8px 10px;
+  font: 12px/1.2 system-ui, sans-serif;
+  color: #cbd5e1;
+  background: #0b0f14aa;
+  border-radius: 8px;
+  z-index: 10;
+}

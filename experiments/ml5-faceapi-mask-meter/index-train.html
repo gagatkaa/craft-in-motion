@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Smile Trainer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="style-train.css" />
+</head>
+
+<body>
+    <main>
+        <h1>Smile Trainer</h1>
+
+        <div class="grid">
+            <div class="cam">
+                <video id="video" autoplay playsinline muted></video>
+                <canvas id="overlay" width="560" height="420"></canvas>
+                <div class="badge mid" id="liveLabel">Eye calibration not done</div>
+            </div>
+
+            <div class="panel">
+                <p class="muted">Steps: <br />
+                    1) Calibrate neutral eyes <br />
+                    2) Collect samples “Fake” and “Real” <br />
+                    3) Train <br />
+                    4) Save the model or load one and test.</p>
+
+                <div class="row" id="train">
+                    <button id="btnCalib">Calibrate neutral eyes</button>
+                    <button id="btnAddFake">+ Sample: Fake</button>
+                    <button id="btnAddReal">+ Sample: Real</button>
+                    <button id="btnTrain">Train</button>
+                </div>
+
+                <div class="row">
+                    <button id="btnSave">Save model (download files)</button>
+                    <button id="btnLoadFolder">Load model from /models folder</button>
+                    <label class="file">
+                        Load model from files
+                        <input id="fileInput" type="file" multiple accept=".json,.bin" />
+                    </label>
+                </div>
+
+                <div class="row">
+                    <button id="btnReset">Reset model</button>
+                </div>
+
+                <div class="counts">
+                    <div class="pill">fake: <span id="cntFake">0</span></div>
+                    <div class="pill">real: <span id="cntReal">0</span></div>
+                    <div class="pill">status: <span id="status">initializing…</span></div>
+                </div>
+                <p id="readout" class="muted">S, EAR i ΔEAR pojawią się tutaj.</p>
+
+            </div>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <script>
+        if (window.__SMILE_APP_STARTED__) {
+            console.log('App already started, skipping re-init');
+        } else {
+            window.__SMILE_APP_STARTED__ = true;
+
+            const video = document.getElementById('video');
+            const overlay = document.getElementById('overlay');
+            const ctx = overlay.getContext('2d');
+            const liveLabel = document.getElementById('liveLabel');
+
+            const btnCalib = document.getElementById('btnCalib');
+            const btnAddFake = document.getElementById('btnAddFake');
+            const btnAddReal = document.getElementById('btnAddReal');
+            const btnTrain = document.getElementById('btnTrain');
+            const btnReset = document.getElementById('btnReset');
+            const btnSave = document.getElementById('btnSave');
+            const btnLoadFolder = document.getElementById('btnLoadFolder');
+            const fileInput = document.getElementById('fileInput');
+
+            const cntFake = document.getElementById('cntFake');
+            const cntReal = document.getElementById('cntReal');
+            const statusEl = document.getElementById('status');
+            const readout = document.getElementById('readout');
+
+            const CALIB_REQUIRED_FRAMES = 20;
+
+            let facemesh, predictHandler;
+            let predictions = [];
+            let nn;
+            let trained = false;
+
+            let baselineEAR = null;
+            let calibActive = false, calibSum = 0, calibN = 0;
+
+            let nFake = 0, nReal = 0;
+
+            const IDX = {
+                mouthL: 61, mouthR: 291, mouthUp: 13, mouthDn: 14,
+                eyeL_h1: 33, eyeL_h2: 133, eyeL_v1: 159, eyeL_v2: 145,
+                eyeR_h1: 362, eyeR_h2: 263, eyeR_v1: 386, eyeR_v2: 374
+            };
+
+            init().catch(e => {
+                console.error(e);
+                alert('Camera or ml5 not working. Run via localhost or HTTPS and allow camera access.');
+            });
+
+            async function init() {
+                statusEl.textContent = 'requesting camera access…';
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 560, height: 420 } });
+                video.srcObject = stream;
+                await new Promise(r => video.onloadedmetadata = r);
+
+                facemesh = ml5.facemesh(video, () => {
+                    statusEl.textContent = 'facemesh ready. Do eye calibration.';
+                });
+                predictHandler = results => { predictions = results; draw(); };
+                facemesh.on('predict', predictHandler);
+
+                nn = ml5.neuralNetwork({ task: 'classification', debug: false, learningRate: 0.2, hiddenUnits: 8 });
+
+                btnCalib.onclick = startCalibration;
+                btnAddFake.onclick = () => captureSample('fake');
+                btnAddReal.onclick = () => captureSample('real');
+                btnTrain.onclick = trainModel;
+                btnReset.onclick = resetModel;
+
+                btnSave.onclick = () => {
+                    if (!trained) { alert('Train the model before saving.'); return; }
+                    nn.save();
+                };
+
+                btnLoadFolder.onclick = () => {
+                    nn.load({
+                        model: 'models/model.json',
+                        metadata: 'models/model_meta.json',
+                        weights: 'models/model.weights.bin'
+                    }, () => {
+                        trained = true;
+                        statusEl.textContent = 'model loaded from /models';
+                    });
+                };
+
+                fileInput.onchange = async (e) => {
+                    const files = Array.from(e.target.files);
+
+                    nn.load(files, () => {
+                        trained = true;
+                        statusEl.textContent = 'model loaded from selected files';
+                    });
+                };
+            }
+
+            function startCalibration() {
+                calibActive = true;
+                baselineEAR = null;
+                calibSum = 0;
+                calibN = 0;
+                liveLabel.className = 'badge mid';
+                liveLabel.textContent = `Neutral calibration… keep a calm face (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+                statusEl.textContent = 'eye calibration…';
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, overlay.width, overlay.height);
+                if (!predictions || predictions.length === 0) {
+                    liveLabel.className = 'badge mid';
+                    liveLabel.textContent = 'No face in frame';
+                    return;
+                }
+
+                const kp = predictions[0].scaledMesh;
+                strokePath([IDX.mouthL, IDX.mouthUp, IDX.mouthR, IDX.mouthDn], kp);
+                strokePath([IDX.eyeL_h1, IDX.eyeL_v1, IDX.eyeL_h2, IDX.eyeL_v2], kp);
+                strokePath([IDX.eyeR_h1, IDX.eyeR_v1, IDX.eyeR_h2, IDX.eyeR_v2], kp);
+
+                const S = smileWidthRatio(kp);
+                const EAR = (eyeAspectRatioL(kp) + eyeAspectRatioR(kp)) / 2;
+
+                if (calibActive) {
+                    calibSum += EAR;
+                    calibN++;
+
+                    liveLabel.className = 'badge mid';
+                    liveLabel.textContent = `Neutral calibration… keep a calm face (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+
+                    if (calibN >= CALIB_REQUIRED_FRAMES) {
+                        baselineEAR = calibSum / calibN;
+                        calibActive = false;
+                        statusEl.textContent = 'calibration OK. Collect samples.';
+                        liveLabel.textContent = 'Calibration OK. Collect samples.';
+                    }
+                }
+
+                const dEAR = baselineEAR == null ? 0 : (EAR - baselineEAR);
+                readout.innerHTML = `S: <b>${S.toFixed(2)}</b> | EAR: <b>${EAR.toFixed(3)}</b> | ΔEAR: <b>${dEAR.toFixed(3)}</b>`;
+
+                if (trained && baselineEAR != null) {
+                    nn.classify({ S, dEAR }, (err, res) => {
+                        if (err || !res || !res.length) return;
+                        const top = res[0];
+                        const label = top.label;
+                        const conf = Math.round(top.confidence * 100);
+                        if (label === 'real') { liveLabel.className = 'badge good'; liveLabel.textContent = `Genuine smile (${conf}%)`; }
+                        else if (label === 'fake') { liveLabel.className = 'badge bad'; liveLabel.textContent = `Fake smile (${conf}%)`; }
+                        else { liveLabel.className = 'badge mid'; liveLabel.textContent = `${label} (${conf}%)`; }
+                    });
+                } else {
+                    if (baselineEAR == null) { liveLabel.className = 'badge mid'; liveLabel.textContent = 'Calibrate eyes first.'; }
+                    else { liveLabel.className = 'badge mid'; liveLabel.textContent = 'Add samples and train the model.'; }
+                }
+            }
+
+            function captureSample(label) {
+                if (baselineEAR == null) { alert('Calibrate eyes first.'); return; }
+                if (!predictions || predictions.length === 0) return;
+
+                const kp = predictions[0].scaledMesh;
+                const S = smileWidthRatio(kp);
+                const EAR = (eyeAspectRatioL(kp) + eyeAspectRatioR(kp)) / 2;
+                const dEAR = EAR - baselineEAR;
+
+                nn.addData({ S, dEAR }, { label });
+                if (label === 'fake') { nFake++; cntFake.textContent = nFake; }
+                if (label === 'real') { nReal++; cntReal.textContent = nReal; }
+                statusEl.textContent = `sample added: ${label}`;
+            }
+
+            function trainModel() {
+                if ((nFake + nReal) < 12) { alert('Collect more samples. Minimum 6+6, ideally 20–30 per class.'); return; }
+                statusEl.textContent = 'normalizing…';
+                nn.normalizeData();
+                statusEl.textContent = 'training…';
+                nn.train({ epochs: 60, batchSize: 16 }, (epoch, loss) => {
+                    statusEl.textContent = `epoch ${epoch}/60 — loss: ${loss?.loss?.toFixed(4) ?? '—'}`;
+                }, () => {
+                    trained = true;
+                    statusEl.textContent = 'model trained';
+                });
+            }
+
+            function resetModel() {
+                nn = ml5.neuralNetwork({ task: 'classification', debug: false, learningRate: 0.2, hiddenUnits: 8 });
+                trained = false;
+                nFake = 0; nReal = 0; cntFake.textContent = '0'; cntReal.textContent = '0';
+                statusEl.textContent = 'model reset. Collect samples and train again.';
+            }
+
+            function smileWidthRatio(pts) {
+                const L = pts[IDX.mouthL], R = pts[IDX.mouthR], U = pts[IDX.mouthUp], D = pts[IDX.mouthDn];
+                const w = dist(L, R), h = dist(U, D) + 1e-6;
+                return w / h;
+            }
+            function eyeAspectRatioL(pts) {
+                const h1 = pts[IDX.eyeL_h1], h2 = pts[IDX.eyeL_h2];
+                const v1 = pts[IDX.eyeL_v1], v2 = pts[IDX.eyeL_v2];
+                const A = dist(v1, v2), C = dist(h1, h2) + 1e-6;
+                return A / C;
+            }
+            function eyeAspectRatioR(pts) {
+                const h1 = pts[IDX.eyeR_h1], h2 = pts[IDX.eyeR_h2];
+                const v1 = pts[IDX.eyeR_v1], v2 = pts[IDX.eyeR_v2];
+                const A = dist(v1, v2), C = dist(h1, h2) + 1e-6;
+                return A / C;
+            }
+            function dist(a, b) { const dx = a[0] - b[0], dy = a[1] - b[1]; return Math.hypot(dx, dy); }
+            function strokePath(indices, pts) {
+                ctx.strokeStyle = '#5c6bf7'; ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(pts[indices[0]][0], pts[indices[0]][1]);
+                for (let i = 1; i < indices.length; i++) {
+                    const p = pts[indices[i]];
+                    ctx.lineTo(p[0], p[1]);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            }
+        }
+    </script>
+</body>
+
+</html>

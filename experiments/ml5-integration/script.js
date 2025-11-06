@@ -5,81 +5,89 @@ let video,
   cameraSelect;
 let measuredHand = "right";
 
-// Tempo detection
 const WRIST_HISTORY_LENGTH = 30;
 const MIN_MOVEMENT_THRESHOLD = 5;
 const JITTER_MOVEMENT_THRESHOLD = 12;
 const BEAT_INTERVAL_HISTORY = 10;
 const STATIC_RESET_THRESHOLD_MS = 3000;
+let wristYHistory = [],
+  lastBeatTime = 0,
+  beatTimestamps = [],
+  lastFrameTime = 0;
 
-let wristYHistory = [];
-let lastBeatTime = 0;
-let beatTimestamps = [];
-let lastFrameTime = 0;
-
-// Elbow angle
 const ELBOW_OK_MIN = 10;
 const ELBOW_OK_MAX = 75;
 const ANGLE_SMOOTHING = 5;
 let elbowAngleHistory = [];
 
-// Video & light
 const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
 let lastLuminance = 0;
-const LOW_LIGHT_THRESHOLD = 40;
+const LOW_LIGHT_THRESHOLD = 50;
 
-// Blink (tempo feedback)
-let blinkFrames = 0;
-let lastBlinkPart = null;
-
-// Safety banner hold
 let unsafeUntil = 0;
 const UNSAFE_HOLD_MS = 600;
-// --- ADAPTIVE THRESHOLDS BY SCALE ---
-function clamp(v, a, b) {
-  return Math.min(Math.max(v, a), b);
+
+let facemesh,
+  fmPredictions = [];
+let smileNN,
+  smileModelReady = false;
+let baselineEAR = null,
+  calibSum = 0,
+  calibN = 0,
+  calibrated = false;
+const CALIB_REQUIRED_FRAMES = 20;
+
+let missingUntil = 0;
+const MISSING_HOLD_MS = 700;
+
+const smileStatusEl = () => document.getElementById("smile-status");
+
+const IDX = {
+  mouthL: 61,
+  mouthR: 291,
+  mouthUp: 13,
+  mouthDn: 14,
+  eyeL_h1: 33,
+  eyeL_h2: 133,
+  eyeL_v1: 159,
+  eyeL_v2: 145,
+  eyeR_h1: 362,
+  eyeR_h2: 263,
+  eyeR_v1: 386,
+  eyeR_v2: 374,
+};
+
+function wireHandSelection() {
+  document.querySelectorAll('input[name="hand"]').forEach((r) => {
+    r.addEventListener("change", (e) => {
+      measuredHand = e.target.value;
+      wristYHistory = [];
+      beatTimestamps = [];
+      lastBeatTime = 0;
+      elbowAngleHistory = [];
+      document.getElementById("tempo-display").textContent = "0.0";
+      document.getElementById("elbow-angle").textContent = "—";
+      document.getElementById("form-status").textContent = "—";
+    });
+  });
 }
 
-function getShoulderDist(dict) {
-  const L = dict?.leftShoulder;
-  const R = dict?.rightShoulder;
-  const conf = (k) => k?.confidence ?? k?.score ?? 0;
-  if (!L || !R || conf(L) < 0.2 || conf(R) < 0.2) return null;
-  return Math.hypot(L.x - R.x, L.y - R.y);
-}
-
-const SHOULDER_BASE = 200;
-
-function dynamicThresholds(dict) {
-  const dist = getShoulderDist(dict) || SHOULDER_BASE;
-
-  const scale = clamp(SHOULDER_BASE / dist, 0.6, 3.0);
-  return {
-    MIN_MOVE: Math.round(MIN_MOVEMENT_THRESHOLD * scale),
-    JITTER: Math.round(JITTER_MOVEMENT_THRESHOLD * scale),
-    minConfForArm: clamp(0.5 - (scale - 1) * 0.12, 0.3, 0.5), // obniż lekko wymagany conf
-  };
-}
-
-// --- SIMPLE FACE HIT-TEST ---
 function checkHandsShakerInFrontOfFace(pose, opts = {}) {
-  if (!pose) return { isUnsafe: false, reason: "no-pose" };
+  if (!pose) return { isUnsafe: false };
 
   const minConf = opts.minConf ?? 0.35;
-  const padK = opts.padK ?? 0.8; // margin around face rect (in eye-dist units)
-  const tipK = opts.tipK ?? 0.7; // how far beyond wrist (fraction of forearm)
+  const padK = opts.padK ?? 0.8;
+  const tipK = opts.tipK ?? 0.75;
 
   const L = pose.leftEye,
     R = pose.rightEye,
     N = pose.nose;
   const good = (k) => k && (k.confidence ?? k.score ?? 0) >= minConf;
-
-  if (!good(L) || !good(R)) return { isUnsafe: false, reason: "no-face" };
+  if (!good(L) || !good(R)) return { isUnsafe: false };
 
   const eyeDist = Math.hypot(L.x - R.x, L.y - R.y);
 
-  // center between eyes, nudged toward nose if present
   const cx = N && good(N) ? (L.x + R.x) * 0.33 + N.x * 0.34 : (L.x + R.x) / 2;
   const cy = N && good(N) ? (L.y + R.y) * 0.33 + N.y * 0.34 : (L.y + R.y) / 2;
 
@@ -104,7 +112,6 @@ function checkHandsShakerInFrontOfFace(pose, opts = {}) {
     lw = pose.leftWrist;
   const re = pose.rightElbow,
     le = pose.leftElbow;
-
   const offenders = [];
 
   if (pointInRect(rw)) offenders.push("rightWrist");
@@ -126,55 +133,9 @@ function checkHandsShakerInFrontOfFace(pose, opts = {}) {
   const tipR = handTip(rw, re, "rightHandTip");
   const tipL = handTip(lw, le, "leftHandTip");
 
-  const isUnsafe = offenders.length > 0;
-  return { isUnsafe, faceRect, offenders, tips: { tipR, tipL } };
+  return { isUnsafe: offenders.length > 0, faceRect, tips: { tipR, tipL } };
 }
 
-const LOCK_HAND = true;
-function lockToMeasuredHand(pose, hand) {
-  if (!pose) return pose;
-  const opp = hand === "right" ? "left" : "right";
-
-  ["Shoulder", "Elbow", "Wrist"].forEach((J) => {
-    const k = pose[opp + J];
-    if (k) {
-      k.confidence = 0;
-      k.score = 0;
-    }
-  });
-  return pose;
-}
-
-function asDict(pose) {
-  const d = {};
-  if (!pose?.keypoints) return d;
-  for (const k of pose.keypoints) {
-    d[k.part] = {
-      x: k.position.x,
-      y: k.position.y,
-      score: k.score ?? k.confidence ?? 0,
-      confidence: k.score ?? k.confidence ?? 0,
-    };
-  }
-
-  return d;
-}
-
-function getPart(dict, part, min = 0.4) {
-  const k = dict?.[part];
-  return k && (k.score ?? 0) >= min ? k : null;
-}
-
-const ARM_LINKS = {
-  right: [
-    ["rightShoulder", "rightElbow"],
-    ["rightElbow", "rightWrist"],
-  ],
-  left: [
-    ["leftShoulder", "leftElbow"],
-    ["leftElbow", "leftWrist"],
-  ],
-};
 const sketch = (p) => {
   p.setup = () => {
     canvas = p.createCanvas(VIDEO_WIDTH, VIDEO_HEIGHT);
@@ -186,22 +147,9 @@ const sketch = (p) => {
     p.getMediaDevices();
 
     lastFrameTime = p.millis();
-  };
 
-  function wireHandSelection() {
-    document.querySelectorAll('input[name="hand"]').forEach((r) => {
-      r.addEventListener("change", (e) => {
-        measuredHand = e.target.value;
-        wristYHistory = [];
-        beatTimestamps = [];
-        lastBeatTime = 0;
-        elbowAngleHistory = [];
-        document.getElementById("tempo-display").textContent = "0.0";
-        document.getElementById("elbow-angle").textContent = "—";
-        document.getElementById("form-status").textContent = "—";
-      });
-    });
-  }
+    loadSmileModel();
+  };
 
   p.getMediaDevices = () => {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -267,16 +215,21 @@ const sketch = (p) => {
     }
     poseNet = ml5.poseNet(
       video,
-      {
-        flipHorizontal: true,
-        detectionType: "single",
-        inputResolution: 513,
-        multiplier: 0.75,
-        stride: 16,
-      },
+      { flipHorizontal: true, detectionType: "single" },
       p.modelReady
     );
     poseNet.on("pose", p.gotPoses);
+
+    if (facemesh?.video !== video.elt) {
+      facemesh = ml5.facemesh(video, () => {
+        const s = smileStatusEl();
+        s.className = "badge mid";
+        s.textContent = "Loading model...";
+      });
+      facemesh.on("predict", (res) => {
+        fmPredictions = res;
+      });
+    }
   };
 
   p.modelReady = () => {
@@ -302,6 +255,7 @@ const sketch = (p) => {
 
       p.analyzeLuminance();
       p.drawPoseData();
+      p.updateSmileDetector();
     } else {
       p.background(50);
       p.fill(255);
@@ -344,27 +298,43 @@ const sketch = (p) => {
       lastLuminance < LOW_LIGHT_THRESHOLD ? "block" : "none";
   };
 
+  function checkFraming(pose) {
+    const leftWrist = pose.keypoints.find((k) => k.part === "leftWrist");
+    const rightWrist = pose.keypoints.find((k) => k.part === "rightWrist");
+
+    const missingWrists =
+      (!leftWrist || leftWrist.score < 0.2) &&
+      (!rightWrist || rightWrist.score < 0.2);
+
+    return { isMissing: missingWrists };
+  }
+
   p.drawPoseData = () => {
     const now = p.millis();
     const safetyBanner = document.getElementById("safety-warning");
+    const framingWarning = document.getElementById("framing-warning");
 
-    if (poses.length > 0) {
-      const rawPose = poses[0].pose;
-      const dict = asDict(rawPose);
+    const pose = poses.length > 0 ? poses[0].pose : null;
 
-      p.drawKeypoints(dict);
+    if (pose) {
+      const frameCheck = checkFraming(pose);
+      if (frameCheck.isMissing) {
+        missingUntil = now + MISSING_HOLD_MS;
+      }
+    } else {
+      missingUntil = now + MISSING_HOLD_MS;
+    }
+    framingWarning.style.display = now < missingUntil ? "block" : "none";
 
-      p.drawSelectedArmSkeleton(dict, measuredHand);
+    if (pose) {
+      p.calculateTempo(pose, now);
+      p.calculateElbowAngle(pose);
 
-      p.calculateTempo(dict, now);
-      p.calculateElbowAngle(dict);
-
-      const res = checkHandsShakerInFrontOfFace(dict, {
+      const res = checkHandsShakerInFrontOfFace(pose, {
         minConf: 0.35,
         padK: 0.8,
         tipK: 0.75,
       });
-
       if (res.isUnsafe) unsafeUntil = now + UNSAFE_HOLD_MS;
       safetyBanner.style.display = now < unsafeUntil ? "block" : "none";
 
@@ -375,20 +345,6 @@ const sketch = (p) => {
         p.strokeWeight(2);
         const r = res.faceRect;
         p.rect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
-        p.pop();
-      }
-      if (res.tips?.tipR) {
-        p.push();
-        p.noStroke();
-        p.fill("#f59e0b");
-        p.circle(res.tips.tipR.x, res.tips.tipR.y, 8);
-        p.pop();
-      }
-      if (res.tips?.tipL) {
-        p.push();
-        p.noStroke();
-        p.fill("#f59e0b");
-        p.circle(res.tips.tipL.x, res.tips.tipL.y, 8);
         p.pop();
       }
     } else {
@@ -407,18 +363,12 @@ const sketch = (p) => {
     }
   };
 
-  p.calculateTempo = (dict, now) => {
-    const tempoDisplay = document.getElementById("tempo-display");
-
-    const DT = dynamicThresholds ? dynamicThresholds(dict) : null;
-    const MIN_MOVE = DT ? DT.MIN_MOVE : MIN_MOVEMENT_THRESHOLD;
-    const JITTER = DT ? DT.JITTER : JITTER_MOVEMENT_THRESHOLD;
-    const minConf = DT ? DT.minConfForArm : 0.5;
-
+  p.calculateTempo = (pose, now) => {
     const wristName = measuredHand + "Wrist";
-    const wrist = getPart(dict, wristName, minConf);
-    if (!wrist) {
-      if (tempoDisplay) tempoDisplay.textContent = "...";
+    const wrist = pose[wristName];
+    const tempoDisplay = document.getElementById("tempo-display");
+    if (!wrist || wrist.confidence < 0.5) {
+      tempoDisplay.textContent = "...";
       return;
     }
 
@@ -429,8 +379,8 @@ const sketch = (p) => {
     if (wristYHistory.length >= WRIST_HISTORY_LENGTH) {
       const minY = Math.min(...wristYHistory);
       const maxY = Math.max(...wristYHistory);
-      if (maxY - minY < JITTER) {
-        if (tempoDisplay) tempoDisplay.textContent = "0.0";
+      if (maxY - minY < JITTER_MOVEMENT_THRESHOLD) {
+        tempoDisplay.textContent = "0.0";
         lastBeatTime = now;
         beatTimestamps = [];
         return;
@@ -440,7 +390,7 @@ const sketch = (p) => {
     if (wristYHistory.length > 10) {
       const fiveAgo = wristYHistory[wristYHistory.length - 5];
       const vel = y - fiveAgo;
-      if (vel > MIN_MOVE) {
+      if (vel > MIN_MOVEMENT_THRESHOLD) {
         const tenAgo =
           wristYHistory[wristYHistory.length - 10] || wristYHistory[0];
         if (y > tenAgo) {
@@ -454,16 +404,8 @@ const sketch = (p) => {
             const n = beatTimestamps.length - 1;
             const avg = total / n;
             const bpm = 60000 / avg;
-
-            if (tempoDisplay)
-              tempoDisplay.textContent = p.nf(p.constrain(bpm, 0, 2000), 0, 1);
-
-            const hz = bpm / 60;
-            if (isFinite(hz) && hz >= 0.3 && hz <= 6.5) {
-              window.parent?.postMessage({ type: "ml:tempo", hz }, "*");
-            }
+            tempoDisplay.textContent = p.nf(p.constrain(bpm, 0, 1500), 0, 1);
           }
-          p.blinkKeypoint(wristName);
         }
       }
     }
@@ -524,13 +466,11 @@ const sketch = (p) => {
   };
 
   p.drawElbowArc = (ex, ey, u_x, u_y, w_x, w_y, ok) => {
-    const a1 = Math.atan2(u_y, u_x);
-    const a2 = Math.atan2(w_y, w_x);
-
+    const a1 = Math.atan2(u_y, u_x),
+      a2 = Math.atan2(w_y, w_x);
     let diff = a2 - a1;
     while (diff <= -Math.PI) diff += 2 * Math.PI;
     while (diff > Math.PI) diff -= 2 * Math.PI;
-
     const sweep = Math.abs(diff);
 
     let bx = u_x + w_x,
@@ -557,72 +497,122 @@ const sketch = (p) => {
     p.arc(ex, ey, r * 2, r * 2, start, end);
     p.pop();
   };
+};
 
-  p.blinkKeypoint = (part) => {
-    blinkFrames = 10;
-    lastBlinkPart = part;
-  };
-
-  p.drawKeypoints = (dict) => {
-    const tracked = [
-      "nose",
-      "leftEye",
-      "rightEye",
-      "leftEar",
-      "rightEar",
-      measuredHand + "Shoulder",
-      measuredHand + "Elbow",
-      measuredHand + "Wrist",
-    ];
-
-    p.strokeWeight(0);
-    for (const part of tracked) {
-      const k = getPart(dict, part, 0.3);
-      if (!k) continue;
-
-      p.fill(49, 75, 237);
-      let size = 12;
-
-      const measuredPart = measuredHand + "Wrist";
-      if (part === measuredPart && part === lastBlinkPart && blinkFrames > 0) {
-        p.fill(239, 68, 68);
-        size = 25;
-        blinkFrames--;
-      } else if (blinkFrames <= 0) {
-        lastBlinkPart = null;
-      }
-
-      p.ellipse(k.x, k.y, size, size);
-
-      if (part === measuredPart) {
-        p.fill(255);
-        p.textSize(10);
-        p.textAlign(p.CENTER, p.CENTER);
-        p.text("BPM", k.x, k.y + 2);
-      }
+function loadSmileModel() {
+  const el = smileStatusEl();
+  smileNN = ml5.neuralNetwork({ task: "classification", debug: false });
+  smileNN.load(
+    {
+      model: "models/model.json",
+      metadata: "models/model_meta.json",
+      weights: "models/model.weights.bin",
+    },
+    () => {
+      smileModelReady = true;
+      baselineEAR = null;
+      calibSum = 0;
+      calibN = 0;
+      calibrated = false;
+      el.className = "badge mid";
+      el.textContent = `Eye calibration... (0/${CALIB_REQUIRED_FRAMES})`;
     }
-  };
-  p.drawSelectedArmSkeleton = (dict, hand) => {
-    p.stroke(255);
-    p.strokeWeight(3);
-    const links = ARM_LINKS[hand];
-    for (const [a, b] of links) {
-      const ka = getPart(dict, a, 0.3);
-      const kb = getPart(dict, b, 0.3);
-      if (ka && kb) p.line(ka.x, ka.y, kb.x, kb.y);
+  );
+}
+
+function smileWidthRatio(pts) {
+  const L = pts[IDX.mouthL],
+    R = pts[IDX.mouthR],
+    U = pts[IDX.mouthUp],
+    D = pts[IDX.mouthDn];
+  const w = dist2D(L, R),
+    h = dist2D(U, D) + 1e-6;
+  return w / h;
+}
+function eyeAspectRatioL(pts) {
+  const h1 = pts[IDX.eyeL_h1],
+    h2 = pts[IDX.eyeL_h2];
+  const v1 = pts[IDX.eyeL_v1],
+    v2 = pts[IDX.eyeL_v2];
+  const A = dist2D(v1, v2),
+    C = dist2D(h1, h2) + 1e-6;
+  return A / C;
+}
+function eyeAspectRatioR(pts) {
+  const h1 = pts[IDX.eyeR_h1],
+    h2 = pts[IDX.eyeR_h2];
+  const v1 = pts[IDX.eyeR_v1],
+    v2 = pts[IDX.eyeR_v2];
+  const A = dist2D(v1, v2),
+    C = dist2D(h1, h2) + 1e-6;
+  return A / C;
+}
+function dist2D(a, b) {
+  const dx = a[0] - b[0],
+    dy = a[1] - b[1];
+  return Math.hypot(dx, dy);
+}
+
+function getKP() {
+  if (!fmPredictions || fmPredictions.length === 0) return null;
+  return fmPredictions[0].scaledMesh;
+}
+
+p5.prototype.updateSmileDetector = function () {
+  const el = smileStatusEl();
+  if (!smileModelReady) {
+    el.className = "badge mid";
+    el.textContent = "Loading model...";
+    return;
+  }
+
+  const kp = getKP();
+  if (!kp) {
+    if (!calibrated) {
+      el.className = "badge mid";
+      el.textContent = `Calibration: no face (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+    } else {
+      el.className = "badge mid";
+      el.textContent = "No Face Detected";
     }
-  };
-  p.drawSkeleton = (skeleton) => {
-    p.stroke(255);
-    p.strokeWeight(3);
-    for (let i = 0; i < skeleton.length; i++) {
-      const a = skeleton[i][0],
-        b = skeleton[i][1];
-      if (a.score > 0.3 && b.score > 0.3) {
-        p.line(a.position.x, a.position.y, b.position.x, b.position.y);
-      }
+    return;
+  }
+
+  const S = smileWidthRatio(kp);
+  const EAR = (eyeAspectRatioL(kp) + eyeAspectRatioR(kp)) / 2;
+
+  if (!calibrated) {
+    calibSum += EAR;
+    calibN++;
+    el.className = "badge mid";
+    el.textContent = `Eye calibration... (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+    if (calibN >= CALIB_REQUIRED_FRAMES) {
+      baselineEAR = calibSum / calibN;
+      calibrated = true;
+      el.className = "badge mid";
+      el.textContent = "Ready. Smile.";
     }
-  };
+    return;
+  }
+
+  const dEAR = EAR - baselineEAR;
+  smileNN.classify({ S, dEAR }, (err, res) => {
+    if (err || !res || !res.length) return;
+    const top = res[0];
+    const label = top.label;
+    const conf = Math.round(top.confidence * 100);
+
+    if (label === "real") {
+      el.className = "badge good";
+      el.textContent = `Real Smile ${conf}%`;
+    } else if (label === "fake") {
+      el.className = "badge bad";
+      el.textContent = `Fake Smile ${conf}%`;
+    } else {
+      el.className = "badge mid";
+      el.textContent = `${label} ${conf}%`;
+    }
+  });
 };
 
 window.onload = () => {
