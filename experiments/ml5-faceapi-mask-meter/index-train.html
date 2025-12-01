@@ -108,7 +108,33 @@
 
             async function init() {
                 statusEl.textContent = 'requesting camera access…';
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 560, height: 420 } });
+                // const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 560, height: 420 } });
+                // Get permission first (otherwise enumerateDevices will return empty labels)
+                await navigator.mediaDevices.getUserMedia({ video: true });
+
+                // List all available video devices
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === "videoinput");
+
+                console.log("Available cameras:");
+                videoDevices.forEach((d, i) => console.log(`${i}: ${d.label}`));
+
+                // Try to pick the built-in one (often contains “Integrated” or “HD Webcam”)
+                const laptopCam = videoDevices.find(d =>
+                    /integrated|built.?in|hd webcam/i.test(d.label)
+                ) || videoDevices[1]; // fallback if not found
+
+                // Use that device explicitly
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: { exact: laptopCam.deviceId }, width: 560, height: 420 }
+                });
+
+                currentStream = stream;
+                video.srcObject = stream;
+
+                // Wait until the camera actually delivers frame data
+                await new Promise(r => video.addEventListener('loadeddata', r, { once: true }));
+
                 video.srcObject = stream;
                 await new Promise(r => video.onloadedmetadata = r);
 

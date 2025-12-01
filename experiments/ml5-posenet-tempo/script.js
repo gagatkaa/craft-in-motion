@@ -270,8 +270,8 @@ const sketch = (p) => {
       {
         flipHorizontal: true,
         detectionType: "single",
-        inputResolution: 513,
-        multiplier: 0.75,
+        inputResolution: 257,
+        multiplier: 0.5,
         stride: 16,
       },
       p.modelReady

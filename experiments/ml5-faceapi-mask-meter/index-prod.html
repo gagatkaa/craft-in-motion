@@ -2,175 +2,266 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8" />
-    <title>Smile Detector</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="style-prod.css" />
+  <meta charset="utf-8" />
+  <title>Smile Detector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style-prod.css" />
+  <style>
+    /* tiny helper styles for the picker */
+    .toolbar { display:flex; gap:.5rem; align-items:center; justify-content:center; margin:.5rem 0 1rem }
+    .toolbar label { font: 500 14px/1 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; opacity:.9 }
+    .toolbar select { padding:.35rem .5rem; border-radius:8px; border:1px solid #444; background:#111; color:#eee }
+  </style>
 </head>
 
 <body>
-    <main>
-        <h1 style="text-align:center">Smile Detector</h1>
+  <main>
+    <h1 style="text-align:center">Smile Detector</h1>
 
-        <div class="cam">
-            <video id="video" autoplay playsinline muted></video>
-            <canvas id="overlay" width="560" height="420"></canvas>
-            <div class="badge mid" id="liveLabel">Initializing…</div>
-        </div>
-    </main>
+    <!-- Camera picker -->
+    <div class="toolbar">
+      <label for="cameraSelect">Camera:</label>
+      <select id="cameraSelect"></select>
+    </div>
 
-    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
-    <script>
-        if (window.__SMILE_PROD_STARTED__) {
-            console.log('Prod already started');
-        } else {
-            window.__SMILE_PROD_STARTED__ = true;
+    <div class="cam">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay" width="560" height="420"></canvas>
+      <div class="badge mid" id="liveLabel">Initializing…</div>
+    </div>
+  </main>
 
-            const video = document.getElementById('video');
-            const overlay = document.getElementById('overlay');
-            const ctx = overlay.getContext('2d');
-            const liveLabel = document.getElementById('liveLabel');
+  <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+  <script>
+    if (window.__SMILE_PROD_STARTED__) {
+      console.log('Prod already started');
+    } else {
+      window.__SMILE_PROD_STARTED__ = true;
 
-            let facemesh, predictHandler;
-            let predictions = [];
-            let nn;
+      const video = document.getElementById('video');
+      const overlay = document.getElementById('overlay');
+      const ctx = overlay.getContext('2d');
+      const liveLabel = document.getElementById('liveLabel');
+      const cameraSelect = document.getElementById('cameraSelect');
 
+      let facemesh, predictHandler;
+      let predictions = [];
+      let nn;
 
-            let baselineEAR = null;
-            let calibSum = 0, calibN = 0;
-            let calibrated = false;
-            const CALIB_REQUIRED_FRAMES = 20;
-            let modelReady = false;
+      // camera handling state
+      let currentStream = null;
+      let deviceList = [];
+      const PREF_KEY = 'smile-detector:preferredCameraId';
 
-            const IDX = {
-                mouthL: 61, mouthR: 291, mouthUp: 13, mouthDn: 14,
-                eyeL_h1: 33, eyeL_h2: 133, eyeL_v1: 159, eyeL_v2: 145,
-                eyeR_h1: 362, eyeR_h2: 263, eyeR_v1: 386, eyeR_v2: 374
-            };
+      let baselineEAR = null;
+      let calibSum = 0, calibN = 0;
+      let calibrated = false;
+      const CALIB_REQUIRED_FRAMES = 20;
+      let modelReady = false;
 
-            init().catch(e => {
-                console.error(e);
-                alert('Run via localhost or HTTPS and allow camera access.');
-            });
+      const IDX = {
+        mouthL: 61, mouthR: 291, mouthUp: 13, mouthDn: 14,
+        eyeL_h1: 33, eyeL_h2: 133, eyeL_v1: 159, eyeL_v2: 145,
+        eyeR_h1: 362, eyeR_h2: 263, eyeR_v1: 386, eyeR_v2: 374
+      };
 
-            async function init() {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 560, height: 420 } });
-                video.srcObject = stream;
-                await new Promise(r => video.onloadedmetadata = r);
+      init().catch(e => {
+        console.error(e);
+        alert('Run via localhost or HTTPS and allow camera access.');
+      });
 
-                facemesh = ml5.facemesh(video, () => {
-                    liveLabel.textContent = 'Loading classifier model…';
-                });
-                predictHandler = (res) => { predictions = res; draw(); };
-                facemesh.on('predict', predictHandler);
+      async function init() {
+        // 1) Start default stream to unlock device labels
+        await startStream({ width: 560, height: 420 });
 
-                nn = ml5.neuralNetwork({ task: 'classification', debug: false });
-                nn.load({
-                    model: 'models/model.json',
-                    metadata: 'models/model_meta.json',
-                    weights: 'models/model.weights.bin'
-                }, () => {
-                    modelReady = true;
+        // 2) Build camera list
+        await populateCameraPicker();
 
-                    baselineEAR = null;
-                    calibSum = 0; calibN = 0; calibrated = false;
-                    liveLabel.className = 'badge mid';
-                    liveLabel.textContent = `Eye calibration… look neutral (${calibN}/${CALIB_REQUIRED_FRAMES})`;
-                });
-            }
+        // 3) Init ML models
+        facemesh = ml5.facemesh(video, () => {
+          liveLabel.textContent = 'Loading classifier model…';
+        });
+        predictHandler = (res) => { predictions = res; draw(); };
+        facemesh.on('predict', predictHandler);
 
-            function draw() {
-                ctx.clearRect(0, 0, overlay.width, overlay.height);
+        nn = ml5.neuralNetwork({ task: 'classification', debug: false });
+        nn.load({
+          model: 'models/model.json',
+          metadata: 'models/model_meta.json',
+          weights: 'models/model.weights.bin'
+        }, () => {
+          modelReady = true;
 
-                if (!predictions || predictions.length === 0) {
-                    // no face
-                    if (!calibrated) {
-                        liveLabel.className = 'badge mid';
-                        liveLabel.textContent = `Calibration: no face (${calibN}/${CALIB_REQUIRED_FRAMES})`;
-                    } else {
-                        liveLabel.className = 'badge mid';
-                        liveLabel.textContent = 'No face in frame';
-                    }
-                    return;
-                }
+          baselineEAR = null;
+          calibSum = 0; calibN = 0; calibrated = false;
+          liveLabel.className = 'badge mid';
+          liveLabel.textContent = `Eye calibration… look neutral (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+        });
 
-                const kp = predictions[0].scaledMesh;
-                const S = smileWidthRatio(kp);
-                const EAR = (eyeAspectRatioL(kp) + eyeAspectRatioR(kp)) / 2;
+        // 4) React to camera changes
+        cameraSelect.addEventListener('change', async () => {
+          const id = cameraSelect.value || undefined;
+          localStorage.setItem(PREF_KEY, id || '');
+          await startStream({ width: 560, height: 420, deviceId: id });
+        });
 
-
-                strokePath([IDX.mouthL, IDX.mouthUp, IDX.mouthR, IDX.mouthDn], kp);
-                strokePath([IDX.eyeL_h1, IDX.eyeL_v1, IDX.eyeL_h2, IDX.eyeL_v2], kp);
-                strokePath([IDX.eyeR_h1, IDX.eyeR_v1, IDX.eyeR_h2, IDX.eyeR_v2], kp);
-
-
-                if (modelReady && !calibrated) {
-                    calibSum += EAR; calibN++;
-                    liveLabel.className = 'badge mid';
-                    liveLabel.textContent = `Eye calibration… look neutral (${calibN}/${CALIB_REQUIRED_FRAMES})`;
-
-                    if (calibN >= CALIB_REQUIRED_FRAMES) {
-                        baselineEAR = calibSum / calibN;
-                        calibrated = true;
-                        liveLabel.className = 'badge mid';
-                        liveLabel.textContent = 'Ready. Look at the camera and smile.';
-                    }
-                    return;
-                }
-
-                if (!modelReady || !calibrated) return;
-
-                const dEAR = EAR - baselineEAR;
-
-                nn.classify({ S, dEAR }, (err, res) => {
-                    if (err || !res || !res.length) return;
-                    const top = res[0];
-                    const label = top.label;
-                    const conf = Math.round(top.confidence * 100);
-                    if (label === 'real') {
-                        liveLabel.className = 'badge good';
-                        liveLabel.textContent = `Genuine smile ${conf}%`;
-                    } else if (label === 'fake') {
-                        liveLabel.className = 'badge bad';
-                        liveLabel.textContent = `Fake smile ${conf}%`;
-                    } else {
-                        liveLabel.className = 'badge mid';
-                        liveLabel.textContent = `${label} ${conf}%`;
-                    }
-                });
-            }
-
-            function smileWidthRatio(pts) {
-                const L = pts[IDX.mouthL], R = pts[IDX.mouthR], U = pts[IDX.mouthUp], D = pts[IDX.mouthDn];
-                const w = dist(L, R), h = dist(U, D) + 1e-6;
-                return w / h;
-            }
-            function eyeAspectRatioL(pts) {
-                const h1 = pts[IDX.eyeL_h1], h2 = pts[IDX.eyeL_h2];
-                const v1 = pts[IDX.eyeL_v1], v2 = pts[IDX.eyeL_v2];
-                const A = dist(v1, v2), C = dist(h1, h2) + 1e-6;
-                return A / C;
-            }
-            function eyeAspectRatioR(pts) {
-                const h1 = pts[IDX.eyeR_h1], h2 = pts[IDX.eyeR_h2];
-                const v1 = pts[IDX.eyeR_v1], v2 = pts[IDX.eyeR_v2];
-                const A = dist(v1, v2), C = dist(h1, h2) + 1e-6;
-                return A / C;
-            }
-            function dist(a, b) { const dx = a[0] - b[0], dy = a[1] - b[1]; return Math.hypot(dx, dy); }
-            function strokePath(indices, pts) {
-                ctx.strokeStyle = '#5c6bf7'; ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(pts[indices[0]][0], pts[indices[0]][1]);
-                for (let i = 1; i < indices.length; i++) {
-                    const p = pts[indices[i]];
-                    ctx.lineTo(p[0], p[1]);
-                }
-                ctx.closePath();
-                ctx.stroke();
-            }
+        // 5) If user had a preferred camera, switch to it once list is ready
+        const preferred = localStorage.getItem(PREF_KEY);
+        if (preferred && deviceList.some(d => d.deviceId === preferred)) {
+          cameraSelect.value = preferred;
+          await startStream({ width: 560, height: 420, deviceId: preferred });
         }
-    </script>
+      }
+
+      async function populateCameraPicker() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        deviceList = devices.filter(d => d.kind === 'videoinput');
+
+        cameraSelect.innerHTML = '';
+        if (deviceList.length === 0) {
+          const opt = document.createElement('option');
+          opt.textContent = 'No cameras found';
+          cameraSelect.appendChild(opt);
+          cameraSelect.disabled = true;
+          return;
+        }
+
+        deviceList.forEach((d, i) => {
+          const opt = document.createElement('option');
+          opt.value = d.deviceId;
+          // Use label if available, else a generic name
+          opt.textContent = d.label || `Camera ${i + 1}`;
+          cameraSelect.appendChild(opt);
+        });
+
+        cameraSelect.disabled = deviceList.length <= 1;
+      }
+
+      async function startStream({ width, height, deviceId }) {
+        // Stop old tracks
+        if (currentStream) {
+          currentStream.getTracks().forEach(t => t.stop());
+          currentStream = null;
+        }
+
+        const constraints = {
+          video: deviceId
+            ? { deviceId: { exact: deviceId }, width, height }
+            : { width, height }
+        };
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          currentStream = stream;
+          video.srcObject = stream;
+          await new Promise(r => video.onloadedmetadata = r);
+        } catch (err) {
+          console.error('getUserMedia failed, retrying with default camera', err);
+          if (deviceId) {
+            // fallback to default if specific device fails
+            return startStream({ width, height });
+          }
+          throw err;
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        if (!predictions || predictions.length === 0) {
+          // no face
+          if (!calibrated) {
+            liveLabel.className = 'badge mid';
+            liveLabel.textContent = `Calibration: no face (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+          } else {
+            liveLabel.className = 'badge mid';
+            liveLabel.textContent = 'No face in frame';
+          }
+          return;
+        }
+
+        const kp = predictions[0].scaledMesh;
+        const S = smileWidthRatio(kp);
+        const EAR = (eyeAspectRatioL(kp) + eyeAspectRatioR(kp)) / 2;
+
+        strokePath([IDX.mouthL, IDX.mouthUp, IDX.mouthR, IDX.mouthDn], kp);
+        strokePath([IDX.eyeL_h1, IDX.eyeL_v1, IDX.eyeL_h2, IDX.eyeL_v2], kp);
+        strokePath([IDX.eyeR_h1, IDX.eyeR_v1, IDX.eyeR_h2, IDX.eyeR_v2], kp);
+
+        if (modelReady && !calibrated) {
+          calibSum += EAR; calibN++;
+          liveLabel.className = 'badge mid';
+          liveLabel.textContent = `Eye calibration… look neutral (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+
+          if (calibN >= CALIB_REQUIRED_FRAMES) {
+            baselineEAR = calibSum / calibN;
+            calibrated = true;
+            liveLabel.className = 'badge mid';
+            liveLabel.textContent = 'Ready. Look at the camera and smile.';
+          }
+          return;
+        }
+
+        if (!modelReady || !calibrated) return;
+
+        const dEAR = EAR - baselineEAR;
+
+        nn.classify({ S, dEAR }, (err, res) => {
+          if (err || !res || !res.length) return;
+          const top = res[0];
+          const label = top.label;
+          const conf = Math.round(top.confidence * 100);
+          if (label === 'real') {
+            liveLabel.className = 'badge good';
+            liveLabel.textContent = `Genuine smile ${conf}%`;
+          } else if (label === 'fake') {
+            liveLabel.className = 'badge bad';
+            liveLabel.textContent = `Fake smile ${conf}%`;
+          } else {
+            liveLabel.className = 'badge mid';
+            liveLabel.textContent = `${label} ${conf}%`;
+          }
+        });
+      }
+
+      function smileWidthRatio(pts) {
+        const L = pts[IDX.mouthL], R = pts[IDX.mouthR], U = pts[IDX.mouthUp], D = pts[IDX.mouthDn];
+        const w = dist(L, R), h = dist(U, D) + 1e-6;
+        return w / h;
+      }
+      function eyeAspectRatioL(pts) {
+        const h1 = pts[IDX.eyeL_h1], h2 = pts[IDX.eyeL_h2];
+        const v1 = pts[IDX.eyeL_v1], v2 = pts[IDX.eyeL_v2];
+        const A = dist(v1, v2), C = dist(h1, h2) + 1e-6;
+        return A / C;
+      }
+      function eyeAspectRatioR(pts) {
+        const h1 = pts[IDX.eyeR_h1], h2 = pts[IDX.eyeR_h2];
+        const v1 = pts[IDX.eyeR_v1], v2 = pts[IDX.eyeR_v2];
+        const A = dist(v1, v2), C = dist(h1, h2) + 1e-6;
+        return A / C;
+      }
+      function dist(a, b) { const dx = a[0] - b[0], dy = a[1] - b[1]; return Math.hypot(dx, dy); }
+      function strokePath(indices, pts) {
+        ctx.strokeStyle = '#5c6bf7'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(pts[indices[0]][0], pts[indices[0]][1]);
+        for (let i = 1; i < indices.length; i++) {
+          const p = pts[indices[i]];
+          ctx.lineTo(p[0], p[1]);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // optional: update picker when devices change (plug/unplug)
+      if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+        navigator.mediaDevices.addEventListener('devicechange', async () => {
+          await populateCameraPicker();
+        });
+      }
+    }
+  </script>
 </body>
 
 </html>
