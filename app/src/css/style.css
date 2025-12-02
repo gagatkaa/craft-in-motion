@@ -1,7 +1,7 @@
 :root {
   --bg: #0f0e0d;
   --text: #f4f4f4;
-  --muted: #b7b7c1;
+  --muted: #e4e4e4;
   --card: #141419cc;
 
   --card-border: rgba(255, 255, 255, 0.08);
@@ -63,7 +63,9 @@ body {
 * {
   box-sizing: border-box;
 }
-
+strong {
+  color: var(--accent);
+}
 .bg {
   position: fixed;
   inset: 0;
@@ -125,7 +127,6 @@ body {
   text-align: center;
   font-size: clamp(36px, 6vw, 68px);
   letter-spacing: 0.05em;
-  line-height: 1.05;
 }
 
 .intro h1 {
@@ -146,7 +147,7 @@ section.panel {
 }
 
 .card {
-  max-width: 960px;
+  max-width: 70rem;
   width: 100%;
   background: var(--card);
   border: 1px solid var(--card-border);
@@ -168,15 +169,56 @@ section.panel {
 }
 
 .card h2 {
-  margin: 0.3em 0 0.2em;
+  margin-bottom: 3rem;
   font-size: clamp(24px, 4.6vw, 44px);
-  line-height: 1.1;
+  line-height: 1.3;
 }
 
 .card p {
-  margin: 0.6em 0 0 0;
+  margin-bottom: 2rem;
   color: var(--muted);
   line-height: 1.6;
+}
+/* split layout base (same as Prologue) */
+.card--split {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+/* visual (image container) */
+.card__visual {
+  flex: 1 1 45%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card__visual img.flow-image {
+  max-width: 25rem;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+/* text */
+.card__copy {
+  flex: 1 1 55%;
+  padding: 0 1rem;
+}
+
+/* mobile optional stacking */
+@media (max-width: 900px) {
+  .card--split,
+  .card--reverse {
+    flex-direction: column;
+  }
+
+  .card__visual,
+  .card__copy {
+    width: 100%;
+  }
 }
 
 .sound-btn {
@@ -514,40 +556,53 @@ section.panel {
   font-size: 14px;
 }
 .interaction {
-  background: #0e1116;
-  color: #e9eef3;
-  /* optional, if you want different font only in this section */
-  font-family: "Red Hat Display", system-ui, sans-serif;
-  display: none;
+  min-height: 90vh;
+  padding: 6vh 6vw;
+  display: none; /* hidden until .visible */
   opacity: 0;
-  display: none;
   transition: opacity 0.4s ease;
 }
 
 .interaction.visible {
-  display: block;
+  display: grid;
+  place-items: center;
   opacity: 1;
 }
 
 .interaction .container {
-  max-width: 960px;
-  margin: 24px auto;
-  padding: 16px;
+  max-width: 70rem;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  padding: clamp(20px, 4vw, 36px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  color: var(--text);
 }
 
+/* headings + copy aligned with other sections */
 .interaction h1,
-.interaction h2,
+.interaction h2 {
+  margin: 0 0 1.5rem;
+  font-size: clamp(24px, 4.6vw, 44px);
+  line-height: 1.3;
+}
+
 .interaction p {
-  margin: 0 0 8px;
+  margin: 0 0 1rem;
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 /* keep the rest the same, but scoped */
 .interaction .panel {
-  background: #151b26;
-  border: 1px solid #263047;
-  border-radius: 12px;
-  padding: 10px 14px;
-  margin: 10px 0;
+  background: var(--panel);
+  border: 1px solid var(--ticket-border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 1rem 0;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
 
 .interaction .status-item {
@@ -559,53 +614,98 @@ section.panel {
 
 .interaction .status-label {
   opacity: 0.9;
+  font-size: 0.9rem;
 }
 
 .interaction .badge {
   display: inline-block;
   padding: 6px 10px;
-  border-radius: 10px;
+  border-radius: 999px;
   font-weight: 800;
-  border: 1px solid #28324a;
-  background: #151c2a;
+  border: 1px solid var(--ticket-border);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.8rem;
 }
 
 .interaction .good {
-  color: #36d48b;
-}
-
-.interaction .bad {
-  color: #ff6b74;
+  color: var(--gS);
 }
 
 .interaction .mid {
-  color: #f0d46b;
+  color: var(--gB);
 }
 
+.interaction .bad {
+  color: var(--gF);
+}
+
+/* warnings – subtle but readable */
 .interaction .warning-banner {
   display: none;
-  margin: 8px 0;
+  margin: 0.75rem 0;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-weight: 600;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ticket-border);
 }
 
 .interaction #low-light-warning {
-  background: #fff3cd;
-  color: #7a5a00;
+  color: var(--gB);
 }
 
 .interaction #framing-warning {
-  background: #ffe6cd;
-  color: #973f01;
+  color: var(--accent);
 }
 
 .interaction #safety-warning {
-  background: #fee2e2;
-  color: #991b1b;
+  color: var(--gF);
 }
 
+/* canvas in the middle like a main “instrument” */
 .interaction #p5-canvas-container {
+  margin-top: 1.5rem;
   display: flex;
   justify-content: center;
+}
+
+/* Left side: text */
+.card__copy {
+  flex: 1 1 55%;
+}
+
+/* Right side: morph SVG */
+.card__visual {
+  flex: 1 1 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Label above the morph */
+.morph-label {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+/* SVG styling inside the card */
+.card__visual svg {
+  width: 150px;
+  height: auto;
+  cursor: pointer;
+}
+
+/* Optional: small tweak for smaller screens if you want a stack */
+@media (max-width: 900px) {
+  .card--split {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .card__visual {
+    align-items: flex-start;
+  }
 }

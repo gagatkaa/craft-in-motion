@@ -287,23 +287,32 @@
             </section>
             <section class="interaction">
                 <div class="container">
-                    <h2>PoseNet Live Tempo + Smile Detector</h2>
+                    <div class="eyebrow">Try it yourself</div>
+                    <h2>Can you keep the rythm and the smile?</h2>
                     <p>
-                        <b>ML Experiment:</b>
-                        Wrist speed + elbow angle control, and an "artificial vs. genuine smile" indicator
-                        based on <code>models/</code>.
+                        You’ve seen what a busy night does to a bartender. Now it’s your turn
+                        to step behind the bar. This camera-based experiment watches your
+                        shaking tempo and your smile to see whether you can stay steady under
+                        “service pressure”.
+                    </p>
+                    <p>
+                        Allow camera access, pick your shaking hand, hold something as your
+                        “shaker” (or just use your empty hand) and move it up and down like
+                        you’re making cocktails. The system will track your tempo, posture and
+                        facial expression while you try to stay in rhythm.
                     </p>
 
                     <div id="camera-selection-panel" class="panel">
                         <div class="status-item">
-                            <span class="status-label">Select Camera:</span>
+                            <span class="status-label">1. Choose your camera</span>
                             <select id="camera-select"></select>
                         </div>
                     </div>
 
                     <div id="hand-selection-panel" class="panel">
                         <div class="status-item">
-                            <span class="status-label">Measured Hand:</span>
+                            <span class="status-label">2. Which hand are you shaking with?</span>
+
                             <div>
                                 <label style="margin-left:8px;"><input type="radio" name="hand" value="right" checked />
                                     Right</label>
@@ -311,54 +320,77 @@
                                     Left</label>
                             </div>
                         </div>
+
                     </div>
 
+                    <!-- LIVE FEEDBACK PANEL -->
                     <div class="panel">
+                        <h3 style="margin:0 0 8px;">Live feedback</h3>
+
                         <div class="status-item">
-                            <span class="status-label">Model Status:</span>
-                            <span id="status-text">Awaiting Permission...</span>
+                            <span class="status-label">Model status</span>
+                            <span id="status-text">Awaiting camera permission…</span>
                         </div>
+
                         <div class="status-item">
-                            <span class="status-label">Smile:</span>
-                            <span id="smile-status" class="badge mid">Loading model...</span>
+                            <span class="status-label">Smile check</span>
+                            <span id="smile-status" class="badge mid">Loading smile model…</span>
                         </div>
+
                         <div class="status-item">
-                            <span class="status-label">Tempo (BPM):</span>
+                            <span class="status-label">Shaking tempo</span>
                             <span id="tempo-display">0.0</span>
                         </div>
+
                         <div class="status-item">
-                            <span class="status-label">Elbow Angle (°):</span>
+                            <span class="status-label">Elbow angle (°)</span>
                             <span id="elbow-angle">-</span>
                         </div>
+
                         <div class="status-item">
-                            <span class="status-label">Form:</span>
+                            <span class="status-label">Form feedback</span>
                             <span id="form-status">-</span>
                         </div>
+
+                        <p class="hint">
+                            Try to keep a steady tempo and see how your posture and expression
+                            change the longer you “work the shift”
+                        </p>
                     </div>
 
+                    <!-- CANVAS -->
                     <div id="p5-canvas-container"></div>
 
+                    <!-- WARNINGS -->
                     <div id="low-light-warning" class="warning-banner">
-                        ⚠️ Low Light Detected. Please increase illumination for better tracking.
+                        ⚠️ Low light detected. Please add more light so the system can track you properly.
                     </div>
+
                     <div id="framing-warning" class="warning-banner">
-                        🟡 Move back - keep your upper body and hands fully visible in the frame.
+                        🟡 Step back a little – try to keep your upper body and hands fully visible in the frame.
                     </div>
 
                     <div id="safety-warning" class="warning-banner">
-                        🛑 Do not cover your face with the shaker or your hands. Move the equipment away from your line
-                        of sight.
+                        🛑 Don’t cover your face with the shaker or your hands. Keep your line of sight clear.
                     </div>
 
+                    <!-- NERD CORNER / HOW IT WORKS -->
                     <div class="panel">
-                        <h3 style="margin:0 0 8px;">Logic:</h3>
+                        <h3 style="margin:0 0 8px;">For the curious: how it works</h3>
+                        <p style="margin:0 0 8px; color:var(--muted);">
+                            Under the hood this is a small machine learning experiment combining pose estimation and a
+                            custom smile model:
+                        </p>
                         <ul style="margin:0 0 0 20px;">
-                            <li>Tempo from the selected wrist.</li>
-                            <li>Elbow angle = angle between <i>shoulder→elbow</i> and <i>wrist→elbow</i>.</li>
+                            <li>Tempo is estimated from the vertical motion of your selected wrist.</li>
                             <li>
-                                Smile Detector: loads model from <code>/models</code>, calibrates eyes over N frames,
-                                shows
-                                "Artificial" / "Genuine".
+                                Elbow angle is the angle between <i>shoulder → elbow</i> and <i>wrist → elbow</i>,
+                                used as a proxy for “form”.
+                            </li>
+                            <li>
+                                The smile detector loads a model from <code>/models</code>, calibrates eye region
+                                dynamics over multiple
+                                frames, and estimates whether your smile looks more “artificial” or “genuine”.
                             </li>
                         </ul>
                     </div>
