@@ -28,9 +28,9 @@ tl.to(
 ).to(
   ":root",
   {
-    "--blob-hue": "120deg",
+    "--blob-hue": "250deg",
     "--blob-bright": 1.15,
-    duration: 1.0,
+    duration: 2.0,
     ease: "none",
   },
   0.1
