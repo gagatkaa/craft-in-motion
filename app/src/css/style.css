@@ -556,6 +556,8 @@ section.panel {
   font-size: 14px;
 }
 .interaction {
+  position: relative;
+  overflow: hidden;
   min-height: 90vh;
   padding: 6vh 6vw;
   display: none; /* hidden until .visible */
@@ -568,8 +570,30 @@ section.panel {
   place-items: center;
   opacity: 1;
 }
+.camera-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 640px; /* same as VIDEO_WIDTH */
+  margin: 0 auto;
+}
+
+#p5-canvas-container {
+  position: relative;
+  z-index: 2; /* camera stays visible above particles if you want */
+}
+
+.interaction-particles {
+  position: absolute;
+  inset: 0; /* fills camera area */
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3; /* particles on top of webcam */
+}
 
 .interaction .container {
+  position: relative;
+  z-index: 1;
   max-width: 70rem;
   width: 100%;
   background: var(--card);

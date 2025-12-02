@@ -135,6 +135,12 @@ function checkHandsShakerInFrontOfFace(pose, opts = {}) {
 
   return { isUnsafe: offenders.length > 0, faceRect, tips: { tipR, tipL } };
 }
+function updateParticlesFromBPM(bpm) {
+  const hz = bpm / 60; // BPM → Hz
+  if (window.setTempoHz && Number.isFinite(hz)) {
+    window.setTempoHz(hz);
+  }
+}
 
 const sketch = (p) => {
   p.setup = () => {
@@ -360,6 +366,7 @@ const sketch = (p) => {
     if (now - lastBeatTime > STATIC_RESET_THRESHOLD_MS) {
       document.getElementById("tempo-display").textContent = "0.0";
       beatTimestamps = [];
+      updateParticlesFromBPM(0); // tell particles "no tempo"
     }
   };
 
@@ -369,9 +376,19 @@ const sketch = (p) => {
     const tempoDisplay = document.getElementById("tempo-display");
     if (!wrist || wrist.confidence < 0.5) {
       tempoDisplay.textContent = "...";
+      // optional: tell particles to relax
+      // updateParticlesFromBPM(0);
       return;
     }
+    // 🔗 update particle origin to follow the selected wrist
+    if (window.setParticleCenterNorm) {
+      // PoseNet already returns flipped coords (flipHorizontal: true),
+      // so we use them directly.
+      const nx = wrist.x / VIDEO_WIDTH;
+      const ny = wrist.y / VIDEO_HEIGHT;
 
+      window.setParticleCenterNorm(nx, ny);
+    }
     const y = wrist.y;
     wristYHistory.push(y);
     if (wristYHistory.length > WRIST_HISTORY_LENGTH) wristYHistory.shift();
@@ -383,6 +400,8 @@ const sketch = (p) => {
         tempoDisplay.textContent = "0.0";
         lastBeatTime = now;
         beatTimestamps = [];
+        // hand basically static → calm down particles
+        updateParticlesFromBPM(0);
         return;
       }
     }
@@ -404,7 +423,12 @@ const sketch = (p) => {
             const n = beatTimestamps.length - 1;
             const avg = total / n;
             const bpm = 60000 / avg;
-            tempoDisplay.textContent = p.nf(p.constrain(bpm, 0, 1500), 0, 1);
+
+            const clampedBpm = p.constrain(bpm, 0, 1500);
+            tempoDisplay.textContent = p.nf(clampedBpm, 0, 1);
+
+            // 🔗 THIS is the key connection:
+            updateParticlesFromBPM(clampedBpm);
           }
         }
       }
@@ -623,3 +647,4 @@ function startML() {
 
   new p5(sketch);
 }
+window.startML = startML;

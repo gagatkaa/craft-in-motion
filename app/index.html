@@ -286,6 +286,7 @@
                 </div>
             </section>
             <section class="interaction">
+                <canvas id="c" class="interaction-particles"></canvas>
                 <div class="container">
                     <div class="eyebrow">Try it yourself</div>
                     <h2>Can you keep the rythm and the smile?</h2>
@@ -323,6 +324,7 @@
 
                     </div>
 
+
                     <!-- LIVE FEEDBACK PANEL -->
                     <div class="panel">
                         <h3 style="margin:0 0 8px;">Live feedback</h3>
@@ -359,7 +361,10 @@
                     </div>
 
                     <!-- CANVAS -->
-                    <div id="p5-canvas-container"></div>
+                    <div class="camera-wrapper">
+                        <canvas id="particles-canvas" class="interaction-particles"></canvas>
+                        <div id="p5-canvas-container"></div>
+                    </div>
 
                     <!-- WARNINGS -->
                     <div id="low-light-warning" class="warning-banner">
@@ -441,6 +446,8 @@
     <script src="src/states/cta.js"></script>
     <script src="src/states/result.js"></script>
     <script src="src/states/morph.js"></script>
+    <script src="src/states/particles.js"></script>
+
 
     <script src="src/ml/posnet.js"></script>
 
