@@ -220,8 +220,87 @@
                             </div>
                         </div>
                     </div>
-                    <button id="ctaBtn" class="ctaBtn" type="button">Start</button>
 
+                    <button id="ctaBtn" class="ctaBtn" type="button">Start</button>
+                </div>
+            </section>
+            <section class="interaction">
+                <div class="container">
+                    <h2>PoseNet Live Tempo + Smile Detector</h2>
+                    <p>
+                        <b>ML Experiment:</b>
+                        Wrist speed + elbow angle control, and an "artificial vs. genuine smile" indicator
+                        based on <code>models/</code>.
+                    </p>
+
+                    <div id="camera-selection-panel" class="panel">
+                        <div class="status-item">
+                            <span class="status-label">Select Camera:</span>
+                            <select id="camera-select"></select>
+                        </div>
+                    </div>
+
+                    <div id="hand-selection-panel" class="panel">
+                        <div class="status-item">
+                            <span class="status-label">Measured Hand:</span>
+                            <div>
+                                <label style="margin-left:8px;"><input type="radio" name="hand" value="right" checked />
+                                    Right</label>
+                                <label style="margin-left:12px;"><input type="radio" name="hand" value="left" />
+                                    Left</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="status-item">
+                            <span class="status-label">Model Status:</span>
+                            <span id="status-text">Awaiting Permission...</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Smile:</span>
+                            <span id="smile-status" class="badge mid">Loading model...</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Tempo (BPM):</span>
+                            <span id="tempo-display">0.0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Elbow Angle (°):</span>
+                            <span id="elbow-angle">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Form:</span>
+                            <span id="form-status">-</span>
+                        </div>
+                    </div>
+
+                    <div id="p5-canvas-container"></div>
+
+                    <div id="low-light-warning" class="warning-banner">
+                        ⚠️ Low Light Detected. Please increase illumination for better tracking.
+                    </div>
+                    <div id="framing-warning" class="warning-banner">
+                        🟡 Move back - keep your upper body and hands fully visible in the frame.
+                    </div>
+
+                    <div id="safety-warning" class="warning-banner">
+                        🛑 Do not cover your face with the shaker or your hands. Move the equipment away from your line
+                        of sight.
+                    </div>
+
+                    <div class="panel">
+                        <h3 style="margin:0 0 8px;">Logic:</h3>
+                        <ul style="margin:0 0 0 20px;">
+                            <li>Tempo from the selected wrist.</li>
+                            <li>Elbow angle = angle between <i>shoulder→elbow</i> and <i>wrist→elbow</i>.</li>
+                            <li>
+                                Smile Detector: loads model from <code>/models</code>, calibrates eyes over N frames,
+                                shows
+                                "Artificial" / "Genuine".
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </section>
 
@@ -246,7 +325,13 @@
         </main>
     </div>
 
-
+    <script>
+        document.getElementById("ctaBtn").addEventListener("click", () => {
+            const interaction = document.querySelector(".interaction");
+            interaction.classList.add("visible");
+            startML();
+        });
+    </script>
 
 
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
@@ -254,10 +339,15 @@
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/TextPlugin.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Flip.min.js"></script>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+
 
     <script src="src/states/intro.js"></script>
     <script src="src/states/cta.js"></script>
     <script src="src/states/result.js"></script>
+    <script src="src/ml/posnet.js"></script>
+
 
 
 </body>
