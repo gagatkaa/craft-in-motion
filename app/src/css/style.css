@@ -265,7 +265,7 @@ section.panel {
 
 .ctaBtn:hover {
   transform: translateY(-3px) scale(1.04) !important;
-  background-color: var(--accent-hover, #e9640c);
+  background-color: var(--accent-hover);
 }
 
 .tickets-wrap {
