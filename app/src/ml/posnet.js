@@ -33,8 +33,10 @@ const UNSAFE_HOLD_MS = 600;
 
 let facemesh,
   fmPredictions = [];
-let smileNN,
-  smileModelReady = false;
+let smileNN = null;
+let smileModelReady = false;
+let smileModelLoading = false;
+
 let baselineEAR = null,
   calibSum = 0,
   calibN = 0,
@@ -350,8 +352,8 @@ const sketch = (p) => {
       if (res.faceRect) {
         p.push();
         p.noFill();
-        p.stroke(now < unsafeUntil ? "#ef4444" : "#22c55e");
-        p.strokeWeight(2);
+        // p.stroke(now < unsafeUntil ? "#ef4444" : "#22c55e");
+        // p.strokeWeight(2);
         const r = res.faceRect;
         p.rect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
         p.pop();
@@ -522,7 +524,18 @@ const sketch = (p) => {
 };
 
 function loadSmileModel() {
+  // Avoid recreating or reloading the model on every p5 restart
+  if (smileNN || smileModelLoading) return;
+
+  smileModelLoading = true;
+  smileModelReady = false;
+
   const el = smileStatusEl();
+  if (el) {
+    el.className = "badge mid";
+    el.textContent = "Loading model...";
+  }
+
   smileNN = ml5.neuralNetwork({ task: "classification", debug: false });
   smileNN.load(
     {
@@ -531,13 +544,19 @@ function loadSmileModel() {
       weights: "src/ml/models/model.weights.bin",
     },
     () => {
+      smileModelLoading = false;
       smileModelReady = true;
+
+      // Reset calibration whenever the model finishes loading
       baselineEAR = null;
       calibSum = 0;
       calibN = 0;
       calibrated = false;
-      el.className = "badge mid";
-      el.textContent = `Eye calibration... (0/${CALIB_REQUIRED_FRAMES})`;
+
+      if (el) {
+        el.className = "badge mid";
+        el.textContent = `Eye calibration... (0/${CALIB_REQUIRED_FRAMES})`;
+      }
     }
   );
 }
@@ -582,20 +601,31 @@ function getKP() {
 
 p5.prototype.updateSmileDetector = function () {
   const el = smileStatusEl();
-  if (!smileModelReady) {
-    el.className = "badge mid";
-    el.textContent = "Loading model...";
+
+  if (!mlStarted) {
+    return;
+  }
+
+  if (!smileNN || !smileModelReady) {
+    if (el) {
+      el.className = "badge mid";
+      el.textContent = "Loading model...";
+    }
     return;
   }
 
   const kp = getKP();
   if (!kp) {
     if (!calibrated) {
-      el.className = "badge mid";
-      el.textContent = `Calibration: no face (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+      if (el) {
+        el.className = "badge mid";
+        el.textContent = `Calibration: no face (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+      }
     } else {
-      el.className = "badge mid";
-      el.textContent = "No Face Detected";
+      if (el) {
+        el.className = "badge mid";
+        el.textContent = "No Face Detected";
+      }
     }
     return;
   }
@@ -606,23 +636,32 @@ p5.prototype.updateSmileDetector = function () {
   if (!calibrated) {
     calibSum += EAR;
     calibN++;
-    el.className = "badge mid";
-    el.textContent = `Eye calibration... (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+    if (el) {
+      el.className = "badge mid";
+      el.textContent = `Eye calibration... (${calibN}/${CALIB_REQUIRED_FRAMES})`;
+    }
     if (calibN >= CALIB_REQUIRED_FRAMES) {
       baselineEAR = calibSum / calibN;
       calibrated = true;
-      el.className = "badge mid";
-      el.textContent = "Ready. Smile.";
+      if (el) {
+        el.className = "badge mid";
+        el.textContent = "Ready. Smile.";
+      }
     }
     return;
   }
 
   const dEAR = EAR - baselineEAR;
+
   smileNN.classify({ S, dEAR }, (err, res) => {
+    if (!mlStarted) return;
+
     if (err || !res || !res.length) return;
     const top = res[0];
     const label = top.label;
     const conf = Math.round(top.confidence * 100);
+
+    if (!el) return;
 
     if (label === "real") {
       el.className = "badge good";
@@ -641,14 +680,27 @@ function startML() {
   if (mlStarted) return;
   mlStarted = true;
 
+  baselineEAR = null;
+  calibSum = 0;
+  calibN = 0;
+  calibrated = false;
+
+  loadSmileModel();
+
   p5Instance = new p5(sketch);
 }
 function stopML() {
-  if (!mlStarted) return;
+  if (!mlStarted && !p5Instance) return;
   mlStarted = false;
 
   if (p5Instance) {
-    p5Instance.noLoop();
+    try {
+      p5Instance.noLoop();
+      p5Instance.remove();
+    } catch (e) {
+      console.warn("Error stopping p5 instance:", e);
+    }
+    p5Instance = null;
   }
 
   const statusText = document.getElementById("status-text");
@@ -666,6 +718,3 @@ function stopML() {
   const formStatus = document.getElementById("form-status");
   if (formStatus) formStatus.textContent = "—";
 }
-
-window.startML = startML;
-window.stopML = stopML;
