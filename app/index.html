@@ -40,8 +40,10 @@
             <section class="panel">
                 <div class="card step card--split" data-from="left">
                     <div class="card__copy">
-                        <div class="eyebrow">Prologue</div>
-                        <h2>The start of something I didn’t expect</h2>
+                        <div class="card__title">
+                            <div class="eyebrow">Prologue</div>
+                            <h2>The start of something I didn’t expect</h2>
+                        </div>
                         <p>
                             I’ve always been <strong>searching for where I belong</strong>, so I started working pretty
                             young - partly
@@ -327,9 +329,9 @@
                             <span class="status-label">2. Which hand are you shaking with?</span>
 
                             <div>
-                                <label style="margin-left:8px;"><input type="radio" name="hand" value="right" checked />
+                                <label><input type="radio" name="hand" value="right" checked />
                                     Right</label>
-                                <label style="margin-left:12px;"><input type="radio" name="hand" value="left" />
+                                <label><input type="radio" name="hand" value="left" />
                                     Left</label>
                             </div>
                         </div>
@@ -337,7 +339,7 @@
                     </div>
 
                     <div class="panel">
-                        <h3 style="margin:0 0 8px;">Live feedback</h3>
+                        <h3>Live feedback</h3>
 
                         <div class="status-item">
                             <span class="status-label">Model status</span>
@@ -392,11 +394,11 @@
 
                     <div class="panel">
                         <h3>For the curious: how it works</h3>
-                        <p style="color:var(--muted);">
+                        <p>
                             Under the hood this is a small machine learning experiment combining pose estimation and a
                             custom smile model:
                         </p>
-                        <ul style="margin:0 0 0 20px;">
+                        <ul>
                             <li>Tempo is estimated from the vertical motion of your selected wrist.</li>
                             <li>
                                 Elbow angle is the angle between <i>shoulder → elbow</i> and <i>wrist → elbow</i>,

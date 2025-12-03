@@ -1,6 +1,6 @@
 gsap.registerPlugin(ScrollTrigger, TextPlugin);
 
-// Pinned master timeline
+
 const tl = gsap.timeline({
   scrollTrigger: {
     trigger: "#ctaStage",
@@ -13,7 +13,7 @@ const tl = gsap.timeline({
   },
 });
 
-// Blobs color ramp
+
 tl.to(
   ":root",
   {
