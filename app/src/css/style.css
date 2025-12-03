@@ -6,6 +6,7 @@
 
   --card-border: rgba(255, 255, 255, 0.08);
   --accent: #ff7a1a;
+  --accent-hover: #d03ff0;
   --accent-2: #ff5078;
 
   --panel: #121218;
@@ -249,14 +250,22 @@ section.panel {
 }
 
 .ctaBtn {
-  padding: 0.9rem 1.25rem;
+  padding: 1rem 2rem;
   border-radius: 999px;
-  background: #fff;
-  color: #0d0d0f;
+  background: var(--accent);
+  color: var(--bg);
   border: 0;
-  font-weight: 800;
-  opacity: 0;
-  transform: translateY(6px);
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--main-font);
+  font-size: var(--font-size-large);
+  display: inline-block;
+  transition: transform 0.25s ease, background-color 0.25s ease;
+}
+
+.ctaBtn:hover {
+  transform: translateY(-3px) scale(1.04) !important;
+  background-color: var(--accent-hover, #e9640c);
 }
 
 .tickets-wrap {
