@@ -1,6 +1,5 @@
 gsap.registerPlugin(ScrollTrigger, TextPlugin);
 
-// Pinned master timeline
 const tl = gsap.timeline({
   scrollTrigger: {
     trigger: "#ctaStage",
@@ -13,7 +12,6 @@ const tl = gsap.timeline({
   },
 });
 
-// Blobs color ramp
 tl.to(
   ":root",
   {
@@ -74,6 +72,36 @@ tl.to(
   .to(tickets, { y: "+=6", duration: 0.2 }, ">")
   .to(tickets, { y: "-=6", duration: 0.25 }, ">");
 
-document
-  .getElementById("ctaBtn")
-  .addEventListener("click", () => alert("Proceed to interaction"));
+const ctaBtn = document.getElementById("ctaBtn");
+const interaction = document.querySelector(".interaction");
+const endShiftBtn = document.getElementById("endShiftBtn");
+const resultModal = document.getElementById("resultModal");
+const closeResultBtn = document.getElementById("closeResultBtn");
+
+if (ctaBtn && interaction) {
+  ctaBtn.addEventListener("click", () => {
+    interaction.classList.add("visible");
+    if (typeof startML === "function") {
+      startML();
+    }
+  });
+}
+
+if (endShiftBtn && resultModal) {
+  endShiftBtn.addEventListener("click", () => {
+    if (typeof stopML === "function") {
+      stopML();
+    }
+    resultModal.classList.add("is-visible");
+  });
+}
+
+if (closeResultBtn && resultModal) {
+  closeResultBtn.addEventListener("click", () => {
+    resultModal.classList.remove("is-visible");
+    // optional: hide the interaction after closing
+    if (interaction) {
+      interaction.classList.remove("visible");
+    }
+  });
+}

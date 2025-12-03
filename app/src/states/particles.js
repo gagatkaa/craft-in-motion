@@ -1,5 +1,3 @@
-// src/states/particles.js
-
 const particleCanvas = document.getElementById("particles-canvas");
 if (!particleCanvas) {
   console.warn("particles-canvas not found");
@@ -9,14 +7,14 @@ if (!particleCanvas) {
   const EMISSION_MULT = 2.0;
   const MAX_PARTICLES = 1500;
 
-  // Use same logical size as the video, to avoid 0-height issues
+
   const BASE_WIDTH = 640;
   const BASE_HEIGHT = 480;
 
   const center = { x: BASE_WIDTH * 0.5, y: BASE_HEIGHT * 0.6 };
 
   function resizeParticlesCanvas() {
-    // Try to match the camera wrapper size; fall back to base size if it's 0
+
     const wrapper = particleCanvas.parentElement;
     const rect = wrapper.getBoundingClientRect();
 
@@ -30,7 +28,7 @@ if (!particleCanvas) {
     center.y = h * 0.6;
   }
   function setParticleCenterNorm(nx, ny) {
-    // nx, ny in [0..1] relative to the camera area
+
     if (!Number.isFinite(nx) || !Number.isFinite(ny)) return;
 
     const x = nx * particleCanvas.width;
@@ -40,9 +38,9 @@ if (!particleCanvas) {
     center.y = y;
   }
 
-  // expose to poseNet script
+
   window.setParticleCenterNorm = setParticleCenterNorm;
-  // Resize once after layout + on window resize
+
   window.addEventListener("load", resizeParticlesCanvas);
   window.addEventListener("resize", resizeParticlesCanvas);
   resizeParticlesCanvas();

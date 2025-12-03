@@ -5,6 +5,9 @@ let video,
   cameraSelect;
 let measuredHand = "right";
 
+let mlStarted = false;
+let p5Instance = null;
+
 const WRIST_HISTORY_LENGTH = 30;
 const MIN_MOVEMENT_THRESHOLD = 5;
 const JITTER_MOVEMENT_THRESHOLD = 12;
@@ -136,7 +139,7 @@ function checkHandsShakerInFrontOfFace(pose, opts = {}) {
   return { isUnsafe: offenders.length > 0, faceRect, tips: { tipR, tipL } };
 }
 function updateParticlesFromBPM(bpm) {
-  const hz = bpm / 60; // BPM → Hz
+  const hz = bpm / 60;
   if (window.setTempoHz && Number.isFinite(hz)) {
     window.setTempoHz(hz);
   }
@@ -366,7 +369,7 @@ const sketch = (p) => {
     if (now - lastBeatTime > STATIC_RESET_THRESHOLD_MS) {
       document.getElementById("tempo-display").textContent = "0.0";
       beatTimestamps = [];
-      updateParticlesFromBPM(0); // tell particles "no tempo"
+      updateParticlesFromBPM(0);
     }
   };
 
@@ -376,14 +379,10 @@ const sketch = (p) => {
     const tempoDisplay = document.getElementById("tempo-display");
     if (!wrist || wrist.confidence < 0.5) {
       tempoDisplay.textContent = "...";
-      // optional: tell particles to relax
-      // updateParticlesFromBPM(0);
+
       return;
     }
-    // 🔗 update particle origin to follow the selected wrist
     if (window.setParticleCenterNorm) {
-      // PoseNet already returns flipped coords (flipHorizontal: true),
-      // so we use them directly.
       const nx = wrist.x / VIDEO_WIDTH;
       const ny = wrist.y / VIDEO_HEIGHT;
 
@@ -400,7 +399,7 @@ const sketch = (p) => {
         tempoDisplay.textContent = "0.0";
         lastBeatTime = now;
         beatTimestamps = [];
-        // hand basically static → calm down particles
+
         updateParticlesFromBPM(0);
         return;
       }
@@ -427,7 +426,6 @@ const sketch = (p) => {
             const clampedBpm = p.constrain(bpm, 0, 1500);
             tempoDisplay.textContent = p.nf(clampedBpm, 0, 1);
 
-            // 🔗 THIS is the key connection:
             updateParticlesFromBPM(clampedBpm);
           }
         }
@@ -639,12 +637,35 @@ p5.prototype.updateSmileDetector = function () {
   });
 };
 
-let mlStarted = false;
-
 function startML() {
-  if (mlStarted) return; // prevent double init
+  if (mlStarted) return;
   mlStarted = true;
 
-  new p5(sketch);
+  p5Instance = new p5(sketch);
 }
+function stopML() {
+  if (!mlStarted) return;
+  mlStarted = false;
+
+  if (p5Instance) {
+    p5Instance.noLoop();
+  }
+
+  const statusText = document.getElementById("status-text");
+  if (statusText) {
+    statusText.textContent = "Session ended.";
+    statusText.style.color = "#d97706";
+  }
+
+  const tempoDisplay = document.getElementById("tempo-display");
+  if (tempoDisplay) tempoDisplay.textContent = "0.0";
+
+  const elbowAngle = document.getElementById("elbow-angle");
+  if (elbowAngle) elbowAngle.textContent = "—";
+
+  const formStatus = document.getElementById("form-status");
+  if (formStatus) formStatus.textContent = "—";
+}
+
 window.startML = startML;
+window.stopML = stopML;

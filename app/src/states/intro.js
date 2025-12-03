@@ -111,7 +111,27 @@ gsap.to(".intro", {
 });
 const sound = new Audio("src/audio/bar-sounds.mp3");
 sound.loop = true;
+
 const btn = document.getElementById("soundButton");
+
+btn.textContent = "Pause Sound";
+
+const unlockAudio = () => {
+  sound
+    .play()
+    .then(() => {
+      console.log("Audio unlocked");
+
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    })
+    .catch((err) => {
+      console.warn("Autoplay still blocked:", err);
+    });
+};
+
+window.addEventListener("pointerdown", unlockAudio);
+window.addEventListener("keydown", unlockAudio);
 
 btn.addEventListener("click", () => {
   if (sound.paused) {
