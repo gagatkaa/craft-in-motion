@@ -1,5 +1,3 @@
-// src/states/particles.js
-
 const particleCanvas = document.getElementById("particles-canvas");
 if (!particleCanvas) {
   console.warn("particles-canvas not found");

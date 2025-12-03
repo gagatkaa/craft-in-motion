@@ -1,6 +1,5 @@
 gsap.registerPlugin(ScrollTrigger, TextPlugin);
 
-
 const tl = gsap.timeline({
   scrollTrigger: {
     trigger: "#ctaStage",
@@ -12,7 +11,6 @@ const tl = gsap.timeline({
     // markers: true,
   },
 });
-
 
 tl.to(
   ":root",
@@ -74,6 +72,9 @@ tl.to(
   .to(tickets, { y: "+=6", duration: 0.2 }, ">")
   .to(tickets, { y: "-=6", duration: 0.25 }, ">");
 
-document
-  .getElementById("ctaBtn")
-  .addEventListener("click", () => alert("Proceed to interaction"));
+  
+document.getElementById("ctaBtn").addEventListener("click", () => {
+  const interaction = document.querySelector(".interaction");
+  interaction.classList.add("visible");
+  startML();
+});
