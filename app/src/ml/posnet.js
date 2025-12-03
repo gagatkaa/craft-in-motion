@@ -352,8 +352,8 @@ const sketch = (p) => {
       if (res.faceRect) {
         p.push();
         p.noFill();
-        p.stroke(now < unsafeUntil ? "#ef4444" : "#22c55e");
-        p.strokeWeight(2);
+        // p.stroke(now < unsafeUntil ? "#ef4444" : "#22c55e");
+        // p.strokeWeight(2);
         const r = res.faceRect;
         p.rect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
         p.pop();
@@ -602,11 +602,9 @@ function getKP() {
 p5.prototype.updateSmileDetector = function () {
   const el = smileStatusEl();
 
-
   if (!mlStarted) {
     return;
   }
-
 
   if (!smileNN || !smileModelReady) {
     if (el) {
@@ -656,7 +654,6 @@ p5.prototype.updateSmileDetector = function () {
   const dEAR = EAR - baselineEAR;
 
   smileNN.classify({ S, dEAR }, (err, res) => {
-  
     if (!mlStarted) return;
 
     if (err || !res || !res.length) return;
@@ -683,16 +680,13 @@ function startML() {
   if (mlStarted) return;
   mlStarted = true;
 
- 
   baselineEAR = null;
   calibSum = 0;
   calibN = 0;
   calibrated = false;
 
- 
   loadSmileModel();
 
- 
   p5Instance = new p5(sketch);
 }
 function stopML() {
