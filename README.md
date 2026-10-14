@@ -1,5 +1,12 @@
 # Craft in Motion
 
+> An interactive motion experience about the rhythm, performance and hidden exhaustion of working behind a bar — driven by your own body movement.
+
+**What I did:** Concept, visual and interaction design, and all code (solo project, Howest DEVINE).
+**Built with:** JavaScript · ml5.js (pose & face tracking) · GSAP · HTML/CSS
+**Portfolio:** [gagatkaa.github.io/porfolio3.0](https://gagatkaa.github.io/porfolio3.0/)
+
+---
 An interactive web experience exploring the connection between **human movement and digital animation**.
 
 The project uses **ml5.js** for browser-based machine learning and **GSAP** for motion and animation, creating an interface that reacts to the user's movement in real time.
